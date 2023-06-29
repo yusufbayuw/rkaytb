@@ -6,11 +6,16 @@
     "license": "MIT",
     "require": {
         "php": "^8.1",
+        "alperenersoy/filament-export": "^0.3.6",
         "filament/filament": "^2.17",
         "guzzlehttp/guzzle": "^7.2",
+        "ibrahimbougaoua/filament-menu-scroll-fix": "^1.0",
+        "konnco/filament-import": "*",
         "laravel/framework": "^10.10",
         "laravel/sanctum": "^3.2",
-        "laravel/tinker": "^2.8"
+        "laravel/tinker": "^2.8",
+        "spatie/laravel-permission": "^5.10",
+        "staudenmeir/laravel-adjacency-list": "^1.13"
     },
     "require-dev": {
         "doctrine/dbal": "^3.6",
