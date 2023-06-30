@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use Closure;
 use App\Models\Rka;
 use Filament\Forms;
+use App\Models\Akun;
 use App\Models\Unit;
 use Filament\Tables;
 use Filament\Resources\Form;
@@ -16,14 +17,14 @@ use Filament\Forms\Components\Toggle;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\TextInput;
+use Filament\Tables\Columns\SelectColumn;
 use Illuminate\Database\Eloquent\Builder;
+use Filament\Tables\Columns\TextInputColumn;
 use App\Filament\Resources\RkaResource\Pages;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\RkaResource\RelationManagers;
 use AlperenErsoy\FilamentExport\Actions\FilamentExportHeaderAction;
-use App\Models\Akun;
-use Filament\Tables\Columns\SelectColumn;
-use Filament\Tables\Columns\TextInputColumn;
 
 class RkaResource extends Resource
 {
@@ -42,9 +43,17 @@ class RkaResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         if (auth()->user()->hasRole('superadmin')) {
-            return parent::getEloquentQuery()->orderBy('unit_nama', 'asc')->tree()->depthFirst();
+            if (auth()->user()->is_editmode) {
+                return parent::getEloquentQuery()->orderBy('unit_nama', 'asc')->isLeaf();
+            } else {
+                return parent::getEloquentQuery()->orderBy('unit_nama', 'asc')->tree()->depthFirst();
+            }
         } else {
-            return parent::getEloquentQuery()->where('unit_nama', auth()->user()->unit_id)->tree()->depthFirst();
+            if (auth()->user()->is_editmode) {
+                return parent::getEloquentQuery()->where('unit_nama', auth()->user()->unit_id)->isLeaf();
+            } else {
+                return parent::getEloquentQuery()->where('unit_nama', auth()->user()->unit_id)->tree()->depthFirst();
+            }
         }
     }
 
@@ -187,27 +196,7 @@ class RkaResource extends Resource
                                 }
                             }),
                         Select::make('satuan')
-                            ->options([
-                                'bulan' => 'bulan',
-                                'kali' => 'kali',
-                                'ls' => 'ls',
-                                'bidang' => 'bidang',
-                                'org' => 'org',
-                                'bln' => 'bln',
-                                'paket' => 'paket',
-                                'dok' => 'dok',
-                                'orang' => 'orang',
-                                'anggota' => 'anggota',
-                                'dus' => 'dus',
-                                'dosen' => 'dosen',
-                                'buah' => 'buah',
-                                'kegiatan' => 'kegiatan',
-                                'pertemuan' => 'pertemuan',
-                                'tahun' => 'tahun',
-                                'mahasiswa' => 'mahasiswa',
-                                'parcel' => 'parcel',
-                                'bungkus' => 'bungkus',
-                            ])->searchable(),
+                            ->options(config('conf_variable.satuan'))->searchable(),
                         TextInput::make('harga_satuan')
                             ->numeric()
                             ->debounce('1500ms')
@@ -351,7 +340,7 @@ class RkaResource extends Resource
         return $table
             ->columns([
                 (auth()->user()->hasRole(['superadmin', 'admin-keuangan'])) ? SelectColumn::make('nomor_akun')->options(Akun::all()->pluck('nama', 'id')) : TextColumn::make('nomor_akun'),
-                TextColumn::make('uraian')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('uraian') : TextColumn::make('uraian')
                     ->icon(function (Rka $record) {
                         if (!$record->is_parent && $record->parent_id !== null) {
                             return 'heroicon-o-dots-horizontal';
@@ -370,15 +359,15 @@ class RkaResource extends Resource
                         if ($record->is_parent && $record->parent_id == null) {
                             return 'lg';
                         }
-                    }),
+                    })->searchable(),
                 TextColumn::make('unit_nama')
                     ->label('Unit')
                     ->formatStateUsing(fn ($state) => Unit::find($state)->nama),
-                TextColumn::make('volume')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('volume')->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('volume')
                     ->formatStateUsing(fn ($state) => ($state !== null) ? number_format($state) : null)
                     ->alignRight(),
-                TextColumn::make('satuan'),
-                TextColumn::make('harga_satuan')
+                (auth()->user()->is_editmode) ? SelectColumn::make('satuan')->options(config('conf_variable.satuan')) : TextColumn::make('satuan'),
+                (auth()->user()->is_editmode) ? TextInputColumn::make('harga_satuan')->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('harga_satuan')
                     ->formatStateUsing(fn ($state) => ($state !== null) ? number_format($state) : null)
                     ->alignRight(),
                 TextColumn::make('total')
@@ -395,7 +384,17 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            if ($state == $record->volume * $record->harga_satuan) {
+                                return number_format($state);
+                            } else {
+                                $state = $record->volume * $record->harga_satuan;
+                                $data = Rka::find($record->id);
+                                $data->total = $state;
+                                $data->total_view = number_format($state, 2, '.', ',');
+                                $data->total_terbilang = self::terbilang($state);
+                                $data->save();
+                                return number_format($state);
+                            }
                         }
                     })->sortable()
                     ->alignRight()
@@ -417,9 +416,11 @@ class RkaResource extends Resource
                         if (!$record->is_parent) {
                             $data = Rka::find($record->id); // Replace with your actual record id
 
-                            $total = $data->januari + $data->februari + $data->maret + $data->april + $data->mei
-                                + $data->juni + $data->juli + $data->agustus + $data->september
-                                + $data->oktober + $data->november + $data->desember;
+                            $total = floatval($data->januari) + floatval($data->februari) + floatval($data->maret) + floatval($data->april)
+                                + floatval($data->mei) + floatval($data->juni) + floatval($data->juli) + floatval($data->agustus)
+                                + floatval($data->september) + floatval($data->oktober) + floatval($data->november)
+                                + floatval($data->desember);
+
                             if ($record->total < $total) {
                                 return 'danger';
                             } else if ($record->total > $total) {
@@ -427,7 +428,7 @@ class RkaResource extends Resource
                             }
                         }
                     }),
-                TextColumn::make('januari')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('januari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('januari')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -460,7 +461,7 @@ class RkaResource extends Resource
                         }
                     })
                     ->alignRight(),
-                TextColumn::make('februari')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('februari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('februari')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -493,7 +494,7 @@ class RkaResource extends Resource
                         }
                     })
                     ->alignRight(),
-                TextColumn::make('maret')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('maret')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('maret')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -526,7 +527,7 @@ class RkaResource extends Resource
                         }
                     })
                     ->alignRight(),
-                TextColumn::make('april')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('april')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('april')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -559,7 +560,7 @@ class RkaResource extends Resource
                         }
                     })
                     ->alignRight(),
-                TextColumn::make('mei')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('mei')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('mei')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -592,7 +593,7 @@ class RkaResource extends Resource
                         }
                     })
                     ->alignRight(),
-                TextColumn::make('juni')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('juni')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juni')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -625,7 +626,7 @@ class RkaResource extends Resource
                         }
                     })
                     ->alignRight(),
-                TextColumn::make('juli')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('juli')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juli')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -658,7 +659,7 @@ class RkaResource extends Resource
                         }
                     })
                     ->alignRight(),
-                TextColumn::make('agustus')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('agustus')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('agustus')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -691,7 +692,7 @@ class RkaResource extends Resource
                         }
                     })
                     ->alignRight(),
-                TextColumn::make('september')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('september')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('september')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -724,7 +725,7 @@ class RkaResource extends Resource
                         }
                     })
                     ->alignRight(),
-                TextColumn::make('oktober')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('oktober')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('oktober')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -757,7 +758,7 @@ class RkaResource extends Resource
                         }
                     })
                     ->alignRight(),
-                TextColumn::make('november')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('november')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('november')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -790,7 +791,7 @@ class RkaResource extends Resource
                         }
                     })
                     ->alignRight(),
-                TextColumn::make('desember')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('desember')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('desember')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
                             $parent = Rka::find($record->id);
@@ -805,7 +806,7 @@ class RkaResource extends Resource
                             }
                         } else if ($state !== null) {
                             return number_format($state);
-                        } 
+                        }
                     })->sortable()
                     ->alignRight()
                     ->weight(function (Rka $record) {
@@ -832,15 +833,27 @@ class RkaResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\Action::make('duplikat')->action(function (Rka $record) {
+                    $data = Rka::find($record->id);
+                    $newData = $data->replicate();
+                    $newData->uraian = $data->uraian . ' COPY';
+                    $newData->save();
+                })->icon('heroicon-s-duplicate')->hidden(auth()->user()->hasRole('admin-keuangan')),
+                Tables\Actions\ViewAction::make()->hidden(!(auth()->user()->hasRole('admin-keuangan'))),
+                Tables\Actions\EditAction::make()->hidden(auth()->user()->hasRole('admin-keuangan')),
+                Tables\Actions\DeleteAction::make()->hidden(auth()->user()->hasRole('admin-keuangan')),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                Tables\Actions\DeleteBulkAction::make()->hidden(auth()->user()->hasRole('admin-keuangan')),
             ])
             ->headerActions([
                 FilamentExportHeaderAction::make('Export'),
             ]);
+    }
+
+    protected function paginateTableQuery(Builder $query): Paginator
+    {
+        return $query->fastPaginate($this->getTableRecordsPerPage());
     }
 
     public static function getPages(): array
