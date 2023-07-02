@@ -11,6 +11,7 @@
         "filament/spatie-laravel-settings-plugin": "^2.17",
         "guzzlehttp/guzzle": "^7.2",
         "hammerstone/fast-paginate": "^1.0",
+        "heloufir/filament-workflow-manager": "^1.1",
         "ibrahimbougaoua/filament-menu-scroll-fix": "^1.0",
         "konnco/filament-import": "*",
         "laravel/framework": "^10.10",

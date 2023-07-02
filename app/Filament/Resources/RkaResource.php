@@ -25,6 +25,8 @@ use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\RkaResource\RelationManagers;
 use AlperenErsoy\FilamentExport\Actions\FilamentExportHeaderAction;
+use App\Models\Setting;
+use Illuminate\Database\Eloquent\Model;
 
 class RkaResource extends Resource
 {
@@ -32,7 +34,7 @@ class RkaResource extends Resource
 
     protected static ?string $modelLabel = 'RKA Investasi';
 
-    protected static ?string $navigationIcon = 'heroicon-o-chart-square-bar';
+    protected static ?string $navigationIcon = 'heroicon-o-trending-up';
 
     protected static ?string $slug = 'rka-investasi';
 
@@ -42,20 +44,26 @@ class RkaResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        if (auth()->user()->hasRole('superadmin')) {
-            if (auth()->user()->is_editmode) {
-                return parent::getEloquentQuery()->orderBy('unit_nama', 'asc')->isLeaf();
-            } else {
-                return parent::getEloquentQuery()->orderBy('unit_nama', 'asc')->tree()->depthFirst();
-            }
-        } else {
-            if (auth()->user()->is_editmode) {
-                return parent::getEloquentQuery()->where('unit_nama', auth()->user()->unit_id)->isLeaf();
-            } else {
-                return parent::getEloquentQuery()->where('unit_nama', auth()->user()->unit_id)->tree()->depthFirst();
-            }
+        // Mendapatkan user sekaligus untuk menghindari pemanggilan berulang ke auth()->user()
+        $user = auth()->user();
+
+        $query = parent::getEloquentQuery();
+
+        // Jika user bukan superadmin, tambahkan filter unit_nama ke query
+        if (!$user->hasRole('superadmin')) {
+            $query->where('unit_nama', $user->unit_id);
         }
+
+        // Jika user dalam mode edit, filter isLeaf, jika tidak filter tree dan depthFirst
+        if ($user->is_editmode) {
+            $query->isLeaf();
+        } else {
+            $query->tree()->depthFirst();
+        }
+
+        return $query->orderBy('unit_nama', 'asc');
     }
+
 
     private static function terbilang($angka)
     {
@@ -144,9 +152,9 @@ class RkaResource extends Resource
                                 function (Closure $get) {
                                     if (auth()->user()->hasRole('superadmin')) {
                                         if ($get('is_parent')) {
-                                            return Rka::where('is_parent', true)->where('id', '!=', ($get('id')))->tree()->depthFirst()->pluck('uraian_view', 'id');
+                                            return Rka::where('is_parent', true)->where('id', '!=', ($get('id')))->where('unit_nama', $get('unit_nama'))->tree()->depthFirst()->pluck('uraian_view', 'id');
                                         } else {
-                                            return Rka::where('is_parent', true)->tree()->depthFirst()->pluck('uraian_view', 'id');
+                                            return Rka::where('is_parent', true)->where('unit_nama', $get('unit_nama'))->tree()->depthFirst()->pluck('uraian_view', 'id');
                                         }
                                     } else {
                                         if ($get('is_parent')) {
@@ -339,7 +347,9 @@ class RkaResource extends Resource
     {
         return $table
             ->columns([
-                (auth()->user()->hasRole(['superadmin', 'admin-keuangan'])) ? SelectColumn::make('nomor_akun')->options(Akun::all()->pluck('nama', 'id')) : TextColumn::make('nomor_akun'),
+                (Setting::find(2)->valbool) ? TextColumn::make('nomor_akun')->formatStateUsing(function (Rka $record) {
+                    return (($record->is_parent) ? '' : 'Inv-' . str_pad($record->id, 6, '0', STR_PAD_LEFT));
+                }) : ((auth()->user()->hasRole(['superadmin', 'admin-keuangan'])) ? SelectColumn::make('nomor_akun')->options(Akun::all()->pluck('nama', 'id')) : TextColumn::make('nomor_akun')),
                 (auth()->user()->is_editmode) ? TextInputColumn::make('uraian') : TextColumn::make('uraian')
                     ->icon(function (Rka $record) {
                         if (!$record->is_parent && $record->parent_id !== null) {
@@ -364,11 +374,11 @@ class RkaResource extends Resource
                     ->label('Unit')
                     ->formatStateUsing(fn ($state) => Unit::find($state)->nama),
                 (auth()->user()->is_editmode) ? TextInputColumn::make('volume')->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('volume')
-                    ->formatStateUsing(fn ($state) => ($state !== null) ? number_format($state) : null)
+                    ->formatStateUsing(fn ($state) => ($state !== null) ? number_format((float)$state) : null)
                     ->alignRight(),
                 (auth()->user()->is_editmode) ? SelectColumn::make('satuan')->options(config('conf_variable.satuan')) : TextColumn::make('satuan'),
                 (auth()->user()->is_editmode) ? TextInputColumn::make('harga_satuan')->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('harga_satuan')
-                    ->formatStateUsing(fn ($state) => ($state !== null) ? number_format($state) : null)
+                    ->formatStateUsing(fn ($state) => ($state !== null) ? number_format((float)$state) : null)
                     ->alignRight(),
                 TextColumn::make('total')
                     ->formatStateUsing(function (Rka $record, $state) {
@@ -385,7 +395,7 @@ class RkaResource extends Resource
                             }
                         } else if ($state !== null) {
                             if ($state == $record->volume * $record->harga_satuan) {
-                                return number_format($state);
+                                return number_format((float)$state);
                             } else {
                                 $state = $record->volume * $record->harga_satuan;
                                 $data = Rka::find($record->id);
@@ -393,7 +403,7 @@ class RkaResource extends Resource
                                 $data->total_view = number_format($state, 2, '.', ',');
                                 $data->total_terbilang = self::terbilang($state);
                                 $data->save();
-                                return number_format($state);
+                                return number_format((float)$state);
                             }
                         }
                     })->sortable()
@@ -442,7 +452,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -475,7 +485,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -508,7 +518,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -541,7 +551,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -574,7 +584,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -607,7 +617,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -640,7 +650,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -673,7 +683,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -706,7 +716,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -739,7 +749,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -772,7 +782,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -805,7 +815,7 @@ class RkaResource extends Resource
                                 return ($jumlah > 0) ? number_format($jumlah) : null;
                             }
                         } else if ($state !== null) {
-                            return number_format($state);
+                            return number_format((float)$state);
                         }
                     })->sortable()
                     ->alignRight()
@@ -838,10 +848,10 @@ class RkaResource extends Resource
                     $newData = $data->replicate();
                     $newData->uraian = $data->uraian . ' COPY';
                     $newData->save();
-                })->icon('heroicon-s-duplicate')->hidden(auth()->user()->hasRole('admin-keuangan')),
-                Tables\Actions\ViewAction::make()->hidden(!(auth()->user()->hasRole('admin-keuangan'))),
-                Tables\Actions\EditAction::make()->hidden(auth()->user()->hasRole('admin-keuangan')),
-                Tables\Actions\DeleteAction::make()->hidden(auth()->user()->hasRole('admin-keuangan')),
+                })->icon('heroicon-s-duplicate')->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
+                Tables\Actions\ViewAction::make()->hidden(!(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool)),
+                Tables\Actions\EditAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
+                Tables\Actions\DeleteAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make()->hidden(auth()->user()->hasRole('admin-keuangan')),

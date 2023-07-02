@@ -5,12 +5,14 @@ namespace App\Providers;
 // use Illuminate\Support\Facades\Gate;
 
 use App\Models\Akun;
+use App\Models\Setting;
 use App\Models\Unit;
 use App\Models\User;
 use App\Policies\AkunPolicy;
 use App\Policies\RolePolicy;
 use App\Policies\UserPolicy;
 use App\Policies\PermissionPolicy;
+use App\Policies\SettingPolicy;
 use App\Policies\UnitPolicy;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
@@ -29,6 +31,7 @@ class AuthServiceProvider extends ServiceProvider
         User::class => UserPolicy::class,
         Unit::class => UnitPolicy::class,
         Akun::class => AkunPolicy::class,
+        Setting::class => SettingPolicy::class,
     ];
 
     /**

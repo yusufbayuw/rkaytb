@@ -5,6 +5,7 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\AkunResource\Pages;
 use App\Filament\Resources\AkunResource\RelationManagers;
 use App\Models\Akun;
+use App\Models\Setting;
 use Filament\Forms;
 use Filament\Resources\Form;
 use Filament\Resources\Resource;
@@ -36,7 +37,7 @@ class AkunResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->columns([
+            ->columns((Setting::find(2)->valbool) ? [] : [
                 Tables\Columns\TextColumn::make('nama'),
                 Tables\Columns\TextColumn::make('keterangan'),
                 Tables\Columns\TextColumn::make('created_at')
@@ -47,11 +48,11 @@ class AkunResource extends Resource
             ->filters([
                 //
             ])
-            ->actions([
+            ->actions((Setting::find(2)->valbool) ? [] : [
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),
             ])
-            ->bulkActions([
+            ->bulkActions((Setting::find(2)->valbool) ? [] : [
                 Tables\Actions\DeleteBulkAction::make(),
             ]);
     }

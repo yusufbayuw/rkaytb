@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e22ba0ae86b0ede9f516032ee44bfb19",
+    "content-hash": "02af15efbe4f953fb416b1f2d03aaddc",
     "packages": [
         {
             "name": "akaunting/laravel-money",
@@ -2057,6 +2057,57 @@
                 "source": "https://github.com/hammerstonedev/fast-paginate/tree/v1.0.1"
             },
             "time": "2023-04-29T18:13:05+00:00"
+        },
+        {
+            "name": "heloufir/filament-workflow-manager",
+            "version": "1.1.11",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/heloufir/filament-workflow-manager.git",
+                "reference": "fd3627f7efe2a80d63d8263c2ad6652d8b07916e"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/heloufir/filament-workflow-manager/zipball/fd3627f7efe2a80d63d8263c2ad6652d8b07916e",
+                "reference": "fd3627f7efe2a80d63d8263c2ad6652d8b07916e",
+                "shasum": ""
+            },
+            "require": {
+                "filament/filament": "^2.13"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Heloufir\\FilamentWorkflowManager\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "EL OUFIR Hatim",
+                    "email": "eloufirhatim@gmail.com"
+                }
+            ],
+            "description": "Manage your own workflows with filament",
+            "homepage": "https://github.com/heloufir/filament-workflow-manager",
+            "keywords": [
+                "filament",
+                "workflow"
+            ],
+            "support": {
+                "issues": "https://github.com/heloufir/filament-workflow-manager/issues",
+                "source": "https://github.com/heloufir/filament-workflow-manager/tree/1.1.11"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/heloufir",
+                    "type": "github"
+                }
+            ],
+            "time": "2022-10-26T06:05:25+00:00"
         },
         {
             "name": "ibrahimbougaoua/filament-menu-scroll-fix",

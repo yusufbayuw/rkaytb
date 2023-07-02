@@ -3,8 +3,10 @@
 namespace App\Filament\Resources\RkaResource\Pages;
 
 use App\Models\User;
+use App\Models\Setting;
 use Filament\Pages\Actions;
 use App\Filament\Resources\RkaResource;
+use App\Filament\Resources\RkaResource\Widgets\TotalOverview;
 use Filament\Resources\Pages\ManageRecords;
 
 class ManageRkas extends ManageRecords
@@ -21,13 +23,21 @@ class ManageRkas extends ManageRecords
                         $userData->is_editmode = !(auth()->user()->is_editmode);
                         $userData->save();
                     }
-                )->color(fn () => (auth()->user()->is_editmode) ? 'secondary' : 'primary'),
-            Actions\CreateAction::make(),
+                )->color(fn () => (auth()->user()->is_editmode) ? 'secondary' : 'primary')
+                ->hidden(Setting::find(1)->valbool),
+            Actions\CreateAction::make()->hidden(Setting::find(1)->valbool),
         ];
     }
 
     protected function getTableRecordsPerPageSelectOptions(): array
     {
         return [50, 100, 200, 300, 500];
+    }
+
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            TotalOverview::class,
+        ];
     }
 }
