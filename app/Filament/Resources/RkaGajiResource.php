@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use Closure;
 use Filament\Forms;
+use App\Models\Akun;
 use App\Models\Unit;
 use Filament\Tables;
 use App\Models\RkaGaji;
@@ -22,6 +23,7 @@ use Filament\Tables\Columns\TextInputColumn;
 use App\Filament\Resources\RkaGajiResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\RkaGajiResource\RelationManagers;
+use AlperenErsoy\FilamentExport\Actions\FilamentExportHeaderAction;
 
 class RkaGajiResource extends Resource
 {
@@ -280,11 +282,21 @@ class RkaGajiResource extends Resource
                 //
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+                Tables\Actions\Action::make('duplikat')->action(function (RkaGaji $record) {
+                    $data = RkaGaji::find($record->id);
+                    $newData = $data->replicate();
+                    $newData->uraian = $data->uraian . ' COPY';
+                    $newData->save();
+                })->icon('heroicon-s-duplicate')->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
+                Tables\Actions\ViewAction::make()->hidden(!(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool)),
+                Tables\Actions\EditAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
+                Tables\Actions\DeleteAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                Tables\Actions\DeleteBulkAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
+            ])
+            ->headerActions([
+                FilamentExportHeaderAction::make('Export'),
             ]);
     }
 

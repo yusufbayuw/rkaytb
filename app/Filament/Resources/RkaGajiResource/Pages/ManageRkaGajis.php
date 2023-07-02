@@ -7,6 +7,7 @@ use App\Models\Setting;
 use Filament\Pages\Actions;
 use App\Filament\Resources\RkaGajiResource;
 use Filament\Resources\Pages\ManageRecords;
+use App\Filament\Resources\RkaGajiResource\Widgets\TotalGajiOverview;
 
 class ManageRkaGajis extends ManageRecords
 {
@@ -31,5 +32,12 @@ class ManageRkaGajis extends ManageRecords
     protected function getTableRecordsPerPageSelectOptions(): array
     {
         return [50, 100, 200, 300, 500];
+    }
+
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            TotalGajiOverview::class,
+        ];
     }
 }

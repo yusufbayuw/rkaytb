@@ -854,7 +854,7 @@ class RkaResource extends Resource
                 Tables\Actions\DeleteAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make()->hidden(auth()->user()->hasRole('admin-keuangan')),
+                Tables\Actions\DeleteBulkAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
             ])
             ->headerActions([
                 FilamentExportHeaderAction::make('Export'),
