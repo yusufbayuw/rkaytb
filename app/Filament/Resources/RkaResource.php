@@ -107,6 +107,46 @@ class RkaResource extends Resource
         }
     }
 
+    private static function buatMonthInput($month)
+    {
+        return TextInput::make($month)
+            ->numeric()
+            ->default(0)
+            ->mask(
+                fn (TextInput\Mask $mask) => $mask
+                    ->numeric()
+                    ->decimalPlaces(2)
+                    ->decimalSeparator('.')
+                    ->thousandsSeparator(',')
+            );
+    }
+
+    private static function buatInput($name)
+    {
+        return TextInput::make($name)
+            ->debounce('1500ms')
+            ->numeric()
+            ->mask(fn (TextInput\Mask $mask) => $mask
+                ->numeric()
+                ->decimalPlaces(2)
+                ->decimalSeparator('.')
+                ->thousandsSeparator(','),)
+            ->afterStateUpdated(function (Closure $get, $state, $set) use ($name) {
+                $other = $name === 'volume' ? 'harga_satuan' : 'volume';
+                $otherValue = $get($other);
+                if (($otherValue > 0) && ($state > 0)) {
+                    $total_ = $otherValue * $state;
+                    $set('total_view', number_format($total_, 2, '.', ','));
+                    $set('total', $total_);
+                    $set('total_terbilang', self::terbilang($total_));
+                } else {
+                    $set('total_view', 0);
+                    $set('total', 0);
+                    $set('total_terbilang', 'Nol');
+                }
+            });
+    }
+
     public static function form(Form $form): Form
     {
         return $form
@@ -150,20 +190,20 @@ class RkaResource extends Resource
                             ->reactive()
                             ->options(
                                 function (Closure $get) {
-                                    if (auth()->user()->hasRole('superadmin')) {
-                                        if ($get('is_parent')) {
-                                            return Rka::where('is_parent', true)->where('id', '!=', ($get('id')))->where('unit_nama', $get('unit_nama'))->tree()->depthFirst()->pluck('uraian_view', 'id');
-                                        } else {
-                                            return Rka::where('is_parent', true)->where('unit_nama', $get('unit_nama'))->tree()->depthFirst()->pluck('uraian_view', 'id');
-                                        }
-                                    } else {
-                                        if ($get('is_parent')) {
-                                            return Rka::where('is_parent', true)->where('unit_nama', auth()->user()->unit_id)->where('id', '!=', ($get('id')))->tree()->depthFirst()->pluck('uraian_view', 'id');
-                                        } else {
-                                            return Rka::where('is_parent', true)->where('unit_nama', auth()->user()->unit_id)->tree()->depthFirst()->pluck('uraian_view', 'id');
-                                        }
+                                    $unit_nama = auth()->user()->hasRole('superadmin') ? $get('unit_nama') : auth()->user()->unit_id;
+
+                                    $query = Rka::where('is_parent', true)
+                                        ->where('unit_nama', $unit_nama);
+
+                                    if ($get('is_parent')) {
+                                        $query->where('id', '!=', $get('id'));
                                     }
+
+                                    return $query->tree()
+                                        ->depthFirst()
+                                        ->pluck('uraian_view', 'id');
                                 }
+
                             )->afterStateUpdated(
                                 function (Closure $get, $set, $state) {
                                     if ($get('is_parent')) {
@@ -182,50 +222,10 @@ class RkaResource extends Resource
                     ]),
                 Forms\Components\Section::make('Rincian')
                     ->schema([
-                        TextInput::make('volume')
-                            ->debounce('1500ms')
-                            ->numeric()
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),)
-                            ->afterStateUpdated(function (Closure $get, $state, $set) {
-                                $volume = $get('harga_satuan');
-                                if (($volume > 0) && ($state > 0)) {
-                                    $total_ = $volume * $state;
-                                    $set('total_view', number_format($total_, 2, '.', ','));
-                                    $set('total', $total_);
-                                    $set('total_terbilang', self::terbilang($total_));
-                                } else {
-                                    $set('total_view', 0);
-                                    $set('total', 0);
-                                    $set('total_terbilang', 'Nol');
-                                }
-                            }),
+                        self::buatInput('volume'),
                         Select::make('satuan')
                             ->options(config('conf_variable.satuan'))->searchable(),
-                        TextInput::make('harga_satuan')
-                            ->numeric()
-                            ->debounce('1500ms')
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),)
-                            ->afterStateUpdated(function (Closure $get, $state, $set) {
-                                $volume = $get('volume');
-                                if (($volume > 0) && ($state > 0)) {
-                                    $total_ = $volume * $state;
-                                    $set('total_view', number_format($total_, 2, '.', ','));
-                                    $set('total', $total_);
-                                    $set('total_terbilang', self::terbilang($total_));
-                                } else {
-                                    $set('total_view', 0);
-                                    $set('total', 0);
-                                    $set('total_terbilang', 'Nol');
-                                }
-                            }),
+                        self::buatInput('harga_satuan'),
                         TextInput::make('total_view')->label('Total (Rupiah)')->disabled(),
                         TextInput::make('total_terbilang')->label('Terbilang')->disabled(),
                         Hidden::make('total'),
@@ -236,102 +236,18 @@ class RkaResource extends Resource
                             ->label('Buat Rincian Bulanan'),
                         Forms\Components\Section::make('Rencana Bulanan')
                             ->schema([
-                                TextInput::make('januari')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                                TextInput::make('februari')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                                TextInput::make('maret')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                                TextInput::make('april')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                                TextInput::make('mei')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                                TextInput::make('juni')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                                TextInput::make('juli')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                                TextInput::make('agustus')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                                TextInput::make('september')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                                TextInput::make('oktober')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                                TextInput::make('november')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                                TextInput::make('desember')
-                                    ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                self::buatMonthInput('januari'),
+                                self::buatMonthInput('februari'),
+                                self::buatMonthInput('maret'),
+                                self::buatMonthInput('april'),
+                                self::buatMonthInput('mei'),
+                                self::buatMonthInput('juni'),
+                                self::buatMonthInput('juli'),
+                                self::buatMonthInput('agustus'),
+                                self::buatMonthInput('september'),
+                                self::buatMonthInput('oktober'),
+                                self::buatMonthInput('november'),
+                                self::buatMonthInput('desember'),
                             ])->hidden(function (Closure $get) {
                                 return (!$get('is_detail'));
                             }),
@@ -343,14 +259,66 @@ class RkaResource extends Resource
             ]);
     }
 
+    public static function buatColumn($month)
+    {
+        if (auth()->user()->is_editmode) {
+            return TextInputColumn::make($month)
+                ->alignRight()
+                ->rules(['numeric'])
+                ->type('number');
+        } else {
+            return TextColumn::make($month)
+                ->formatStateUsing(function (Rka $record, $state) use ($month) {
+                    if ($record->is_parent) {
+                        $parent = Rka::find($record->id);
+                        $jumlah = $parent->childrenScoreSum($month);
+                        $parent->$month = $jumlah;
+                        $parent->save();
+
+                        if ($state !== null && $state > 0) {
+                            return ($jumlah !== $state) ? number_format($jumlah) : null;
+                        } else {
+                            return ($jumlah > 0) ? number_format($jumlah) : null;
+                        }
+                    } else if ($state !== null) {
+                        return number_format((float)$state);
+                    }
+                })
+                ->sortable()
+                ->alignRight()
+                ->weight(function (Rka $record) {
+                    if ($record->is_parent && $record->parent_id !== null) {
+                        return 'medium';
+                    } elseif ($record->parent_id !== null) {
+                        return '';
+                    } else {
+                        return 'black';
+                    }
+                })
+                ->size(function (Rka $record) {
+                    if ($record->is_parent && $record->parent_id == null) {
+                        return 'lg';
+                    }
+                })
+                ->alignRight();
+        }
+    }
+
     public static function table(Table $table): Table
     {
+        $authUser = auth()->user();
+        $isEditMode = $authUser->is_editmode;
+        $units = $units = Unit::all()->pluck('nama', 'id')->toArray();
+        $isAdminKeuangan = $authUser->hasRole('admin-keuangan') || Setting::find(1)->valbool;
+        $isSuperandKeu = $authUser->hasRole(['superadmin', 'admin-keuangan']);
+        $settingValBool = Setting::find(2)->valbool;
+        $akunOptions  =  Akun::all()->pluck('nama', 'id');
         return $table
             ->columns([
-                (Setting::find(2)->valbool) ? TextColumn::make('nomor_akun')->formatStateUsing(function (Rka $record) {
+                ($settingValBool) ? TextColumn::make('nomor_akun')->formatStateUsing(function (Rka $record) {
                     return (($record->is_parent) ? '' : 'Inv-' . str_pad($record->id, 6, '0', STR_PAD_LEFT));
-                }) : ((auth()->user()->hasRole(['superadmin', 'admin-keuangan'])) ? SelectColumn::make('nomor_akun')->options(Akun::all()->pluck('nama', 'id')) : TextColumn::make('nomor_akun')),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('uraian') : TextColumn::make('uraian')
+                }) : (($isSuperandKeu) ? SelectColumn::make('nomor_akun')->options($akunOptions) : TextColumn::make('nomor_akun')),
+                ($isEditMode) ? TextInputColumn::make('uraian') : TextColumn::make('uraian')
                     ->icon(function (Rka $record) {
                         if (!$record->is_parent && $record->parent_id !== null) {
                             return 'heroicon-o-dots-horizontal';
@@ -372,21 +340,25 @@ class RkaResource extends Resource
                     })->searchable(),
                 TextColumn::make('unit_nama')
                     ->label('Unit')
-                    ->formatStateUsing(fn ($state) => Unit::find($state)->nama),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('volume')->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('volume')
+                    ->formatStateUsing(fn ($state) =>  $units[$state] ?? null),
+                ($isEditMode) ? TextInputColumn::make('volume')
+                    ->alignRight()
+                    ->rules(['required', 'numeric'])
+                    ->type('number')
+                    : TextColumn::make('volume')
                     ->formatStateUsing(fn ($state) => ($state !== null) ? number_format((float)$state) : null)
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? SelectColumn::make('satuan')->options(config('conf_variable.satuan')) : TextColumn::make('satuan'),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('harga_satuan')->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('harga_satuan')
+                ($isEditMode) ? SelectColumn::make('satuan')->options(config('conf_variable.satuan')) : TextColumn::make('satuan'),
+                ($isEditMode) ? TextInputColumn::make('harga_satuan')->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('harga_satuan')
                     ->formatStateUsing(fn ($state) => ($state !== null) ? number_format((float)$state) : null)
                     ->alignRight(),
                 TextColumn::make('total')
                     ->formatStateUsing(function (Rka $record, $state) {
                         if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSum();
-                            $parent->total = $jumlah;
-                            $parent->save();
+                            //$parent = Rka::find($record->id);
+                            $jumlah = $record->childrenScoreSum('total');
+                            $record->total = $jumlah;
+                            $record->save();
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -409,9 +381,11 @@ class RkaResource extends Resource
                     })->sortable()
                     ->alignRight()
                     ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
+                        $isParentId = $record->parent_id;
+                        $isParentAndHasParent = $record->is_parent && $isParentId !== null;
+                        if ($isParentAndHasParent) {
                             return 'medium';
-                        } elseif ($record->parent_id !== null) {
+                        } elseif ($isParentId !== null) {
                             return '';
                         } else {
                             return 'black';
@@ -438,423 +412,41 @@ class RkaResource extends Resource
                             }
                         }
                     }),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('januari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('januari')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumJanuari();
-                            $parent->januari = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('februari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('februari')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumFebruari();
-                            $parent->februari = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('maret')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('maret')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumMaret();
-                            $parent->maret = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('april')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('april')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumApril();
-                            $parent->april = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('mei')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('mei')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumMei();
-                            $parent->mei = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('juni')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juni')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumJuni();
-                            $parent->juni = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('juli')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juli')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumJuli();
-                            $parent->juli = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('agustus')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('agustus')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumAgustus();
-                            $parent->agustus = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('september')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('september')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumSeptember();
-                            $parent->september = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('oktober')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('oktober')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumOktober();
-                            $parent->oktober = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('november')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('november')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumNovember();
-                            $parent->november = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('desember')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('desember')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            $parent = Rka::find($record->id);
-                            $jumlah = $parent->childrenScoreSumDesember();
-                            $parent->desember = $jumlah;
-                            $parent->save();
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            return number_format((float)$state);
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->alignRight(),
+                self::buatColumn('januari'),
+                self::buatColumn('februari'),
+                self::buatColumn('maret'),
+                self::buatColumn('april'),
+                self::buatColumn('mei'),
+                self::buatColumn('juni'),
+                self::buatColumn('juli'),
+                self::buatColumn('agustus'),
+                self::buatColumn('september'),
+                self::buatColumn('oktober'),
+                self::buatColumn('november'),
+                self::buatColumn('desember'),
                 TextColumn::make('created_at')
-                    ->dateTime(),
+                    ->dateTime()->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('updated_at')
-                    ->dateTime(),
+                    ->dateTime()->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 //
             ])
             ->actions([
-                Tables\Actions\Action::make('duplikat')->action(function (Rka $record) {
-                    $data = Rka::find($record->id);
-                    $newData = $data->replicate();
-                    $newData->uraian = $data->uraian . ' COPY';
-                    $newData->save();
-                })->icon('heroicon-s-duplicate')->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
-                Tables\Actions\ViewAction::make()->hidden(!(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool)),
-                Tables\Actions\EditAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
-                Tables\Actions\DeleteAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
+                Tables\Actions\Action::make('duplikat')
+                    ->action(function (Rka $record) {
+                        $newData = $record->replicate();
+                        $newData->uraian = $record->uraian . ' COPY';
+                        $newData->save();
+                    })
+                    ->icon('heroicon-s-duplicate')
+                    ->hidden($isAdminKeuangan),
+                Tables\Actions\ViewAction::make()->hidden(!$isAdminKeuangan),
+                Tables\Actions\EditAction::make()->hidden($isAdminKeuangan),
+                Tables\Actions\DeleteAction::make()->hidden($isAdminKeuangan),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
+                Tables\Actions\DeleteBulkAction::make()->hidden($isAdminKeuangan),
             ])
             ->headerActions([
                 FilamentExportHeaderAction::make('Export'),

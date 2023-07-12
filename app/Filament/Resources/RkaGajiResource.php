@@ -274,9 +274,9 @@ class RkaGajiResource extends Resource
                         }
                     })->sortable()->alignRight(),
                 Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime(),
+                    ->dateTime()->toggleable(),
                 Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime(),
+                    ->dateTime()->toggleable(),
             ])
             ->filters([
                 //

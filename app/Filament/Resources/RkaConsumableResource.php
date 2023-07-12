@@ -828,9 +828,9 @@ class RkaConsumableResource extends Resource
                     })
                     ->alignRight(),
                 TextColumn::make('created_at')
-                    ->dateTime(),
+                    ->dateTime()->toggleable(),
                 TextColumn::make('updated_at')
-                    ->dateTime(),
+                    ->dateTime()->toggleable(),
             ])
             ->filters([
                 //
