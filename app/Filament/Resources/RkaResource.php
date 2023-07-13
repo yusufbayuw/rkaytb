@@ -8,6 +8,7 @@ use Filament\Forms;
 use App\Models\Akun;
 use App\Models\Unit;
 use Filament\Tables;
+use App\Models\Setting;
 use Filament\Resources\Form;
 use Filament\Resources\Table;
 use Filament\Resources\Resource;
@@ -16,7 +17,10 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Illuminate\Database\Eloquent\Model;
 use Filament\Forms\Components\TextInput;
+use Filament\Tables\Columns\Layout\Split;
+use Filament\Tables\Columns\Layout\Stack;
 use Filament\Tables\Columns\SelectColumn;
 use Illuminate\Database\Eloquent\Builder;
 use Filament\Tables\Columns\TextInputColumn;
@@ -25,8 +29,6 @@ use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\RkaResource\RelationManagers;
 use AlperenErsoy\FilamentExport\Actions\FilamentExportHeaderAction;
-use App\Models\Setting;
-use Illuminate\Database\Eloquent\Model;
 
 class RkaResource extends Resource
 {
@@ -58,10 +60,15 @@ class RkaResource extends Resource
         if ($user->is_editmode) {
             $query->isLeaf();
         } else {
-            $query->tree()->depthFirst();
+            $query->tree()->orderBy('path', 'desc');
+            $query->depthFirst();
         }
 
-        return $query->orderBy('unit_nama', 'asc');
+        if ($user->hasRole('superadmin')) {
+            $query->orderBy('unit_nama', 'asc');
+        }
+
+        return $query; 
     }
 
 
@@ -315,15 +322,22 @@ class RkaResource extends Resource
         $akunOptions  =  Akun::all()->pluck('nama', 'id');
         return $table
             ->columns([
-                ($settingValBool) ? TextColumn::make('nomor_akun')->formatStateUsing(function (Rka $record) {
-                    return (($record->is_parent) ? '' : 'Inv-' . str_pad($record->id, 6, '0', STR_PAD_LEFT));
-                }) : (($isSuperandKeu) ? SelectColumn::make('nomor_akun')->options($akunOptions) : TextColumn::make('nomor_akun')),
-                ($isEditMode) ? TextInputColumn::make('uraian') : TextColumn::make('uraian')
+                ($settingValBool) ?
+                    TextColumn::make('nomor_akun')->formatStateUsing(function (Rka $record) {
+                        return (($record->is_parent) ? '' : 'Inv-' . str_pad($record->id, 6, '0', STR_PAD_LEFT));
+                    })->grow(false)
+                    : (($isSuperandKeu) ?
+                        SelectColumn::make('nomor_akun')->options($akunOptions)->grow(false)
+                        : TextColumn::make('nomor_akun'))->grow(false),
+                ($isEditMode) ?
+                    TextInputColumn::make('uraian')->grow(false)
+                    :
+                    TextColumn::make('uraian')
                     ->icon(function (Rka $record) {
                         if (!$record->is_parent && $record->parent_id !== null) {
                             return 'heroicon-o-dots-horizontal';
                         }
-                    })
+                    })->grow(false)
                     ->weight(function (Rka $record) {
                         if ($record->is_parent && $record->parent_id !== null) {
                             return 'medium';
@@ -428,7 +442,7 @@ class RkaResource extends Resource
                     ->dateTime()->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('updated_at')
                     ->dateTime()->toggleable(isToggledHiddenByDefault: true),
-            ])
+            ]) //->reorderable('order_column')
             ->filters([
                 //
             ])
