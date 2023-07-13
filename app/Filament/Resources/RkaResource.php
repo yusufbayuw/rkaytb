@@ -68,7 +68,7 @@ class RkaResource extends Resource
             $query->orderBy('unit_nama', 'asc');
         }
 
-        return $query; 
+        return $query;
     }
 
 
@@ -458,9 +458,6 @@ class RkaResource extends Resource
                 Tables\Actions\ViewAction::make()->hidden(!$isAdminKeuangan),
                 Tables\Actions\EditAction::make()->hidden($isAdminKeuangan),
                 Tables\Actions\DeleteAction::make()->hidden($isAdminKeuangan),
-            ])
-            ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make()->hidden($isAdminKeuangan),
             ])
             ->headerActions([
                 FilamentExportHeaderAction::make('Export'),

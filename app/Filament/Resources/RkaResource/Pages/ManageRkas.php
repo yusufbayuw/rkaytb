@@ -2,12 +2,14 @@
 
 namespace App\Filament\Resources\RkaResource\Pages;
 
+use Closure;
+use App\Models\Rka;
 use App\Models\User;
 use App\Models\Setting;
 use Filament\Pages\Actions;
 use App\Filament\Resources\RkaResource;
-use App\Filament\Resources\RkaResource\Widgets\TotalOverview;
 use Filament\Resources\Pages\ManageRecords;
+use App\Filament\Resources\RkaResource\Widgets\TotalOverview;
 
 class ManageRkas extends ManageRecords
 {
@@ -27,6 +29,11 @@ class ManageRkas extends ManageRecords
                 ->hidden(Setting::find(1)->valbool),
             Actions\CreateAction::make()->hidden(Setting::find(1)->valbool),
         ];
+    }
+
+    public function isTableRecordSelectable(): ?Closure
+    {
+        return fn(Rka $record): bool => false;
     }
 
     protected function getTableRecordsPerPageSelectOptions(): array
