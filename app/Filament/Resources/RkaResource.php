@@ -277,10 +277,8 @@ class RkaResource extends Resource
             return TextColumn::make($month)
                 ->formatStateUsing(function (Rka $record, $state) use ($month) {
                     if ($record->is_parent) {
-                        $parent = Rka::find($record->id);
-                        $jumlah = $parent->childrenScoreSum($month);
-                        $parent->$month = $jumlah;
-                        $parent->save();
+                        // Display aggregates must never persist data or touch updated_at.
+                        $jumlah = $record->childrenScoreSum($month);
 
                         if ($state !== null && $state > 0) {
                             return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -371,8 +369,7 @@ class RkaResource extends Resource
                         if ($record->is_parent) {
                             //$parent = Rka::find($record->id);
                             $jumlah = $record->childrenScoreSum('total');
-                            $record->total = $jumlah;
-                            $record->save();
+                            // Derived totals are calculated for display only.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -384,11 +381,7 @@ class RkaResource extends Resource
                                 return number_format((float)$state);
                             } else {
                                 $state = $record->volume * $record->harga_satuan;
-                                $data = Rka::find($record->id);
-                                $data->total = $state;
-                                $data->total_view = number_format($state, 2, '.', ',');
-                                $data->total_terbilang = self::terbilang($state);
-                                $data->save();
+                                // Editing/saving must be an explicit user action, never a table render.
                                 return number_format((float)$state);
                             }
                         }
