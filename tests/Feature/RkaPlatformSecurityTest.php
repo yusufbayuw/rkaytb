@@ -99,4 +99,18 @@ class RkaPlatformSecurityTest extends TestCase
         $this->expectException(AuthorizationException::class);
         app(TenantAccess::class)->requireReviewInstance($instance, $contributor->id);
     }
+    public function test_synthesis_approval_rejects_outdated_answer_source(): void
+    {
+        extract($this->subject());
+        $svc = app(ContributionService::class);
+        $invite = $svc->invite($instance, $owner->id, $contributor->id);
+        $svc->accept($invite, $contributor->id);
+        $original = $svc->submitAnswer($instance, $contributor->id, 'Original source text.', 0);
+        $synthesis = $svc->synthesize($instance, $owner->id, 'Conclusion using the old source.', [$original->id]);
+
+        $svc->submitAnswer($instance, $contributor->id, 'Corrected source text.', 1);
+        $this->expectException(ValidationException::class);
+        $svc->verify($synthesis, $reviewer->id);
+    }
+
 }
