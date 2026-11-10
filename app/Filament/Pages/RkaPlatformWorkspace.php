@@ -948,6 +948,8 @@ class RkaPlatformWorkspace extends Page
                     ->where('organization_id', $orgId)->where('cycle_id',$cycle->id)
                     ->orderByDesc('version')->limit(8)->get()->map(function ($run) {
                         $run->report_data = json_decode($run->report, true) ?: [];
+                        $run->report_data['excluded_budget_amount'] = app(SharedCostAllocator::class)
+                            ->fromMinor((int)($run->report_data['excluded_budget_minor'] ?? 0));
                         return $run;
                     });
             }
