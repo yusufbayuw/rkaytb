@@ -465,6 +465,7 @@ class RkaPlatformWorkspace extends Page
     {
         $this->access()->requireRole($this->orgId(), (int)auth()->id(), ['owner','admin','finance']);
         $cycle = $this->cycle();
+        if ($cycle->status !== 'draft') throw ValidationException::withMessages(['cycle' => 'Siklus sudah ditutup.']);
         $this->validate(['lineName' => 'required|string|max:180', 'lineCategory' => 'required|max:80',
             'lineAmount' => 'required|numeric|min:0']);
         if ($this->lineUnitId) Unit::query()->where('organization_id', $this->orgId())->findOrFail($this->lineUnitId);
@@ -483,6 +484,7 @@ class RkaPlatformWorkspace extends Page
     {
         $this->access()->requireRole($this->orgId(), (int)auth()->id(), ['owner','admin','finance']);
         $cycle = $this->cycle();
+        if ($cycle->status !== 'draft') throw ValidationException::withMessages(['cycle' => 'Siklus sudah ditutup.']);
         $this->validate(['poolName' => 'required|max:160', 'poolCode' => 'required|max:70',
             'poolAmount' => 'required|numeric|min:0', 'poolMethod' => 'required|in:equal,weighted']);
         $drivers = array_filter($this->poolDrivers, fn ($value) => is_numeric($value) && (float)$value > 0);
