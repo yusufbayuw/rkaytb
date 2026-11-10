@@ -26,11 +26,11 @@ jobs:
           php-version: '8.2'
           extensions: mbstring, dom, fileinfo, pdo_sqlite, sqlite3, zip, gd, intl
           coverage: none
+      - name: PHP syntax lint (independent of Composer)
+        run: |
+          find app/Models/RkaPlatform app/Services/RkaPlatform tests/Unit/RkaPlatform* tests/Feature/RkaPlatform* app/Http/Controllers/RkaPlatformExportController.php app/Filament/Pages/RkaPlatformWorkspace.php database/migrations/2026_11_10_* -type f -name '*.php' -print0 | xargs -0 -n1 php -l
       - run: composer install --no-interaction --prefer-dist --no-progress
       - run: cp .env.example .env && php artisan key:generate --force
-      - name: PHP syntax lint
-        run: |
-          find app/Models/RkaPlatform app/Services/RkaPlatform app/Http/Controllers/RkaPlatformExportController.php app/Filament/Pages/RkaPlatformWorkspace.php database/migrations/2026_11_10_* -type f -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Test white-label platform
         env:
           APP_ENV: testing
