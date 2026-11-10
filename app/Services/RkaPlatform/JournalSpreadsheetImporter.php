@@ -2,7 +2,7 @@
 
 namespace App\Services\RkaPlatform;
 
-use App\Models\RkaPlatform\{JournalBatch, JournalLine, Unit};
+use App\Models\RkaPlatform\{JournalBatch, JournalLine, Unit, Cycle};
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -110,6 +110,13 @@ class JournalSpreadsheetImporter
             ];
         }
         if (!$lines) throw ValidationException::withMessages(['journalFile' => 'Tidak ada baris transaksi yang valid.']);
+        $dates = array_values(array_unique(array_column($lines, 'posted_on')));
+        foreach ($dates as $postedDate) {
+            if (Cycle::query()->where('organization_id', $orgId)->where('status', 'closed')
+                ->whereDate('starts_on', '<=', $postedDate)->whereDate('ends_on', '>=', $postedDate)->exists()) {
+                throw ValidationException::withMessages(['journalFile' => 'Periode '.$postedDate.' telah ditutup. Gunakan alur reopening.']);
+            }
+        }
         // Source line IDs are idempotency keys: reject partial overlapping imports before database insertion.
         $duplicate = JournalLine::query()->where('organization_id', $orgId)->where('source', $source)
             ->whereIn('external_line_id', array_column($lines, 'external_line_id'))
