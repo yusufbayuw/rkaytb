@@ -11,7 +11,6 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
 use Illuminate\Validation\ValidationException;
-use Illuminate\Validation\ValidationException;
 
 class RkaPlatformJournalImportTest extends TestCase
 {
