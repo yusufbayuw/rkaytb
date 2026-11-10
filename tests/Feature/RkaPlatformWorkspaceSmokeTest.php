@@ -40,7 +40,7 @@ class RkaPlatformWorkspaceSmokeTest extends TestCase
     {
         $user = User::factory()->create(['name' => 'Generic User']);
         Livewire::actingAs($user)->test(AccountProfile::class)
-            ->assertSee('Generic User')
+            ->assertSet('name', 'Generic User')
             ->assertSee('Ganti Kata Sandi');
     }
 }
