@@ -876,7 +876,7 @@ class RkaPlatformWorkspace extends Page
             'accountMappings' => collect(), 'reconRuns' => collect(),
             'closingPolicies' => collect(), 'cycleApprovals' => collect(),
             'cycleClosings' => collect(), 'sharingDisputes' => collect(), 'disputePools' => collect(),
-            'unitConsentPools' => collect(), 'signedPoolIds' => [], 'requiresUnitConsent' => false,
+            'unitConsentPools' => collect(), 'signedPoolIds' => [], 'requiresUnitConsent' => false, 'myUnitId' => null,
             'canControlClose' => false, 'canRaiseDispute' => false, 'cycleCurrent' => null,
             'materialityPolicies' => collect(), 'materialityExceptions' => collect(),
             'unmappedBudgetLines' => collect(),
@@ -913,6 +913,7 @@ class RkaPlatformWorkspace extends Page
             $consentSvc = app(\App\Services\RkaPlatform\SharedPoolUnitConsentService::class);
             $data['requiresUnitConsent'] = $consentSvc->isRequired($cycle);
             $membership = $this->access()->membership($orgId, (int)auth()->id());
+            $data['myUnitId'] = $membership->unit_id;
             if ($data['requiresUnitConsent'] && in_array('unit_manager', $membership->roles ?? [], true)
                 && $membership->unit_id !== null) {
                 $unitId = (int)$membership->unit_id;
