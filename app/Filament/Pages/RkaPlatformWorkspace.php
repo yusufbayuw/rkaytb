@@ -1,0 +1,510 @@
+<?php
+
+namespace App\Filament\Pages;
+
+use App\Models\User;
+use App\Models\RkaPlatform\{
+    Organization, Membership, Unit, Cycle, BudgetLine, SharedPool, Question,
+    QuestionInstance, Invitation, Answer, Synthesis, BookTemplate, Book, BookSection,
+    JournalBatch, NarrativeConflict
+};
+use App\Services\RkaPlatform\{
+    TenantAccess, AuditTrail, ContributionService, QuestionRules,
+    SharedCostAllocator, JournalSpreadsheetImporter, BookPublishingService
+};
+use Filament\Pages\Page;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Livewire\WithFileUploads;
+
+class RkaPlatformWorkspace extends Page
+{
+    use WithFileUploads;
+
+    protected static ?string $navigationIcon = 'heroicon-o-document-text';
+    protected static ?string $navigationLabel = 'Workspace RKA';
+    protected static ?string $navigationGroup = 'Rencana Kerja & Anggaran';
+    protected static ?int $navigationSort = 2;
+    protected static string $view = 'filament.pages.rka-platform-workspace';
+
+    public ?int $organizationId = null;
+    public ?int $cycleId = null;
+    public ?int $instanceId = null;
+    public ?int $bookId = null;
+    public ?int $sectionId = null;
+
+    public string $orgName = '';
+    public string $unitCode = '';
+    public string $unitName = '';
+    public string $memberEmail = '';
+    public string $memberRole = 'contributor';
+    public string $cycleName = '';
+    public string $cycleYear = '';
+    public string $cycleStart = '';
+    public string $cycleEnd = '';
+    public string $questionCode = '';
+    public string $questionText = '';
+    public string $questionDomain = 'general';
+    public string $questionOwnerRole = 'reviewer';
+    public string $questionRulesJson = '{}';
+    public string $questionEvidenceJson = '{}';
+    public ?int $newQuestionId = null;
+    public ?int $newOwnerUserId = null;
+    public string $questionContextJson = '{}';
+    public ?int $inviteUserId = null;
+    public int $inviteDays = 7;
+    public string $answerText = '';
+    public int $answerRevision = 0;
+    public string $synthesisText = '';
+    public array $synthesisAnswerIds = [];
+    public string $lineName = '';
+    public string $lineCategory = 'operational';
+    public string $lineAmount = '';
+    public ?int $lineUnitId = null;
+    public string $poolName = '';
+    public string $poolCode = '';
+    public string $poolAmount = '';
+    public string $poolMethod = 'equal';
+    public array $poolDrivers = [];
+    public string $templateName = '';
+    public string $templateSections = '';
+    public ?int $newTemplateId = null;
+    public string $bookTitle = '';
+    public string $sectionContent = '';
+    public string $journalSource = 'primary';
+    public string $journalMappingJson = '{}';
+    public $journalFile = null;
+
+    public function mount(): void
+    {
+        $this->organizationId = Membership::query()->where('user_id', auth()->id())
+            ->where('active', true)->orderBy('organization_id')->value('organization_id');
+        if ($this->organizationId) {
+            $this->cycleId = Cycle::query()->where('organization_id', $this->organizationId)
+                ->latest('id')->value('id');
+        }
+    }
+
+    private function access(): TenantAccess { return app(TenantAccess::class); }
+    private function audit(): AuditTrail { return app(AuditTrail::class); }
+
+    private function orgId(): int
+    {
+        if (!$this->organizationId) abort(403, 'Belum mempunyai organisasi.');
+        $this->access()->membership($this->organizationId, (int)auth()->id());
+        return $this->organizationId;
+    }
+
+    private function managers(): void
+    {
+        $this->access()->requireRole($this->orgId(), (int)auth()->id(), ['owner', 'admin']);
+    }
+
+    private function cycle(): Cycle
+    {
+        return Cycle::query()->where('organization_id', $this->orgId())
+            ->findOrFail($this->cycleId);
+    }
+
+    private function instance(): QuestionInstance
+    {
+        $instance = QuestionInstance::query()->where('organization_id', $this->orgId())
+            ->findOrFail($this->instanceId);
+        $this->access()->requireReadInstance($instance, (int)auth()->id());
+        return $instance;
+    }
+
+    private function book(): Book
+    {
+        $book = Book::query()->where('organization_id', $this->orgId())
+            ->findOrFail($this->bookId);
+        $this->access()->requireRole($book->organization_id, (int)auth()->id(),
+            ['owner', 'admin', 'editor', 'reviewer', 'publisher']);
+        return $book;
+    }
+
+    public function createOrganization(): void
+    {
+        abort_unless(auth()->user()->hasAnyRole(['superadmin', 'admin-keuangan']), 403);
+        $this->validate(['orgName' => 'required|string|min:3|max:150']);
+        DB::transaction(function () {
+            $org = Organization::create([
+                'name' => trim($this->orgName),
+                'brand_name' => trim($this->orgName),
+                'slug' => Str::slug($this->orgName).'-'.Str::lower(Str::random(7)),
+                'currency' => config('rka_platform.currency', 'IDR'),
+                'locale' => config('rka_platform.locale', 'id'),
+                'timezone' => config('rka_platform.timezone', 'Asia/Jakarta'),
+            ]);
+            Membership::create([
+                'organization_id' => $org->id, 'user_id' => auth()->id(), 'roles' => ['owner'],
+            ]);
+            $this->audit()->record($org->id, (int)auth()->id(), 'organization.created', 'organization', $org->id);
+            $this->organizationId = $org->id;
+        });
+        $this->orgName = '';
+        $this->notify('success', 'Organisasi dibuat.');
+    }
+
+    public function selectOrganization(int $id): void
+    {
+        $this->access()->membership($id, (int)auth()->id());
+        $this->organizationId = $id;
+        $this->cycleId = Cycle::query()->where('organization_id', $id)->latest('id')->value('id');
+        $this->instanceId = $this->bookId = $this->sectionId = null;
+    }
+
+    public function addMember(): void
+    {
+        $this->managers();
+        $this->validate([
+            'memberEmail' => 'required|email|max:255',
+            'memberRole' => 'required|in:admin,finance,reviewer,editor,publisher,contributor',
+        ]);
+        $user = User::query()->where('email', $this->memberEmail)->first();
+        if (!$user) throw ValidationException::withMessages(['memberEmail' => 'Pengguna harus memiliki akun existing.']);
+        $existing = Membership::query()->where('organization_id', $this->orgId())
+            ->where('user_id', $user->id)->first();
+        if ($existing && in_array('owner', $existing->roles ?? [], true)) {
+            throw ValidationException::withMessages(['memberEmail' => 'Kewenangan owner tidak boleh ditimpa.']);
+        }
+        $membership = Membership::updateOrCreate(
+            ['organization_id' => $this->orgId(), 'user_id' => $user->id],
+            ['roles' => [$this->memberRole], 'active' => true]
+        );
+        $this->audit()->record($this->orgId(), (int)auth()->id(), 'membership.assigned', 'membership', $membership->id, ['role' => $this->memberRole]);
+        $this->memberEmail = '';
+        $this->notify('success', 'Anggota ditambahkan.');
+    }
+
+    public function createUnit(): void
+    {
+        $this->managers();
+        $this->validate(['unitCode' => 'required|max:50|regex:/^[a-zA-Z0-9_.-]+$/',
+            'unitName' => 'required|max:160']);
+        $unit = Unit::create([
+            'organization_id' => $this->orgId(), 'code' => $this->unitCode, 'name' => $this->unitName,
+        ]);
+        $this->audit()->record($this->orgId(), (int)auth()->id(), 'unit.created', 'unit', $unit->id);
+        $this->unitCode = $this->unitName = '';
+        $this->notify('success', 'Unit dibuat.');
+    }
+
+    public function createCycle(): void
+    {
+        $this->managers();
+        $this->validate([
+            'cycleName' => 'required|max:160', 'cycleYear' => 'required|integer|between:2000,2100',
+            'cycleStart' => 'required|date', 'cycleEnd' => 'required|date|after:cycleStart',
+        ]);
+        $cycle = Cycle::create([
+            'organization_id' => $this->orgId(), 'name' => $this->cycleName, 'year' => $this->cycleYear,
+            'starts_on' => $this->cycleStart, 'ends_on' => $this->cycleEnd,
+        ]);
+        $this->cycleId = $cycle->id;
+        $this->audit()->record($this->orgId(), (int)auth()->id(), 'cycle.created', 'cycle', $cycle->id);
+        $this->notify('success', 'Siklus RKA dibuat.');
+    }
+
+    public function selectCycle(int $id): void
+    {
+        Cycle::query()->where('organization_id', $this->orgId())->findOrFail($id);
+        $this->cycleId = $id;
+        $this->instanceId = $this->bookId = $this->sectionId = null;
+    }
+
+    public function createQuestion(): void
+    {
+        $this->managers();
+        $this->validate([
+            'questionCode' => 'required|max:70|regex:/^[a-zA-Z0-9_.-]+$/',
+            'questionText' => 'required|string|max:15000',
+            'questionDomain' => 'required|string|max:80',
+            'questionOwnerRole' => 'required|string|max:80',
+        ]);
+        $rules = json_decode($this->questionRulesJson, true, 512, JSON_THROW_ON_ERROR);
+        $evidence = json_decode($this->questionEvidenceJson, true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($rules) || !is_array($evidence)) {
+            throw ValidationException::withMessages(['questionRulesJson' => 'Aturan harus berupa objek JSON.']);
+        }
+        app(QuestionRules::class)->applies($rules, []);
+        $question = Question::create([
+            'organization_id' => $this->orgId(), 'code' => $this->questionCode,
+            'prompt' => $this->questionText, 'domain' => $this->questionDomain,
+            'owner_role' => $this->questionOwnerRole, 'rules' => $rules, 'evidence_policy' => $evidence,
+        ]);
+        $this->audit()->record($this->orgId(), (int)auth()->id(), 'question.created', 'question', $question->id);
+        $this->newQuestionId = $question->id;
+        $this->questionCode = $this->questionText = '';
+        $this->notify('success', 'Pertanyaan ditambahkan.');
+    }
+
+    public function createInstance(): void
+    {
+        $this->managers(); $cycle = $this->cycle();
+        $this->validate(['newQuestionId' => 'required|integer', 'newOwnerUserId' => 'required|integer']);
+        $question = Question::query()->where('organization_id', $this->orgId())
+            ->where('active', true)->findOrFail($this->newQuestionId);
+        $this->access()->membership($this->orgId(), $this->newOwnerUserId);
+        $context = json_decode($this->questionContextJson, true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($context) || !app(QuestionRules::class)->applies($question->rules ?? [], $context)) {
+            throw ValidationException::withMessages(['questionContextJson' => 'Kondisi pertanyaan tidak cocok.']);
+        }
+        $instance = QuestionInstance::create([
+            'organization_id' => $this->orgId(), 'cycle_id' => $cycle->id,
+            'question_id' => $question->id, 'owner_user_id' => $this->newOwnerUserId,
+            'prompt_snapshot' => $question->prompt, 'rules_snapshot' => $question->rules,
+        ]);
+        $this->instanceId = $instance->id;
+        $this->audit()->record($this->orgId(), (int)auth()->id(), 'question.assigned', 'question_instance', $instance->id);
+        $this->notify('success', 'Pertanyaan ditugaskan.');
+    }
+
+    public function selectInstance(int $id): void
+    {
+        $instance = QuestionInstance::query()->where('organization_id', $this->orgId())
+            ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
+        $this->access()->requireReadInstance($instance, (int)auth()->id());
+        $this->instanceId = $id;
+        $this->answerRevision = (int)(Answer::query()->where('instance_id', $id)
+            ->where('author_id', auth()->id())->max('revision') ?? 0);
+        $this->answerText = (string)(Answer::query()->where('instance_id', $id)
+            ->where('author_id', auth()->id())->orderByDesc('revision')->value('content') ?? '');
+        $this->synthesisAnswerIds = [];
+        $this->synthesisText = '';
+    }
+
+    public function invite(): void
+    {
+        $this->validate(['inviteUserId' => 'required|integer', 'inviteDays' => 'required|integer|between:1,30']);
+        app(ContributionService::class)->invite($this->instance(), (int)auth()->id(), $this->inviteUserId, $this->inviteDays);
+        $this->notify('success', 'Undangan dibuat.');
+    }
+
+    public function acceptInvite(int $id): void
+    {
+        $invite = Invitation::query()->where('organization_id', $this->orgId())->findOrFail($id);
+        app(ContributionService::class)->accept($invite, (int)auth()->id());
+        $this->notify('success', 'Undangan diterima.');
+    }
+
+    public function submitAnswer(): void
+    {
+        $this->validate(['answerText' => 'required|string|max:100000']);
+        $answer = app(ContributionService::class)->submitAnswer(
+            $this->instance(), (int)auth()->id(), $this->answerText, $this->answerRevision
+        );
+        $this->answerRevision = $answer->revision;
+        $this->notify('success', 'Jawaban disimpan dengan revisi baru.');
+    }
+
+    public function synthesize(): void
+    {
+        $this->validate(['synthesisText' => 'required|string|max:100000', 'synthesisAnswerIds' => 'required|array|min:1']);
+        app(ContributionService::class)->synthesize(
+            $this->instance(), (int)auth()->id(), $this->synthesisText, $this->synthesisAnswerIds
+        );
+        $this->notify('success', 'Sintesis diajukan untuk review.');
+    }
+
+    public function verifySynthesis(int $id): void
+    {
+        $synthesis = Synthesis::query()->where('organization_id', $this->orgId())->findOrFail($id);
+        app(ContributionService::class)->verify($synthesis, (int)auth()->id());
+        $this->notify('success', 'Sintesis diverifikasi.');
+    }
+
+    public function addBudget(): void
+    {
+        $this->access()->requireRole($this->orgId(), (int)auth()->id(), ['owner','admin','finance']);
+        $cycle = $this->cycle();
+        $this->validate(['lineName' => 'required|string|max:180', 'lineCategory' => 'required|max:80',
+            'lineAmount' => 'required|numeric|min:0']);
+        if ($this->lineUnitId) Unit::query()->where('organization_id', $this->orgId())->findOrFail($this->lineUnitId);
+        $line = BudgetLine::create([
+            'organization_id' => $this->orgId(), 'cycle_id' => $cycle->id,
+            'unit_id' => $this->lineUnitId, 'name' => $this->lineName,
+            'category' => $this->lineCategory, 'amount' => $this->lineAmount,
+        ]);
+        $this->audit()->record($this->orgId(), (int)auth()->id(), 'budget.created', 'budget_line', $line->id);
+        $this->lineName = $this->lineAmount = '';
+        $this->notify('success', 'Baris anggaran draft dibuat.');
+    }
+
+    public function createPool(): void
+    {
+        $this->access()->requireRole($this->orgId(), (int)auth()->id(), ['owner','admin','finance']);
+        $cycle = $this->cycle();
+        $this->validate(['poolName' => 'required|max:160', 'poolCode' => 'required|max:70',
+            'poolAmount' => 'required|numeric|min:0', 'poolMethod' => 'required|in:equal,weighted']);
+        $drivers = array_filter($this->poolDrivers, fn ($value) => is_numeric($value) && (float)$value > 0);
+        if (!$drivers) throw ValidationException::withMessages(['poolDrivers' => 'Pilih minimal satu unit penerima.']);
+        $pool = SharedPool::create([
+            'organization_id' => $this->orgId(), 'cycle_id' => $cycle->id,
+            'name' => $this->poolName, 'code' => $this->poolCode,
+            'amount' => $this->poolAmount, 'method' => $this->poolMethod, 'drivers' => $drivers,
+        ]);
+        app(SharedCostAllocator::class)->saveDraft($pool, (int)auth()->id(), $this->access(), $this->audit());
+        $this->poolName = $this->poolCode = $this->poolAmount = '';
+        $this->poolDrivers = [];
+        $this->notify('success', 'Alokasi draft dihitung.');
+    }
+
+    public function importJournal(): void
+    {
+        $this->validate(['journalFile' => 'required|file|mimes:xlsx|max:10240', 'journalSource' => 'required|max:60']);
+        $mapping = json_decode($this->journalMappingJson, true, 512, JSON_THROW_ON_ERROR);
+        if (!is_array($mapping)) throw ValidationException::withMessages(['journalMappingJson' => 'Mapping harus objek JSON.']);
+        $batch = app(JournalSpreadsheetImporter::class)->import(
+            $this->orgId(), (int)auth()->id(), $this->journalFile, $this->journalSource, $mapping
+        );
+        $this->journalFile = null;
+        $this->notify('success', 'Batch XLSX diterima: '.$batch->id.' (status staged).');
+    }
+
+    public function createTemplate(): void
+    {
+        $this->managers();
+        $this->validate(['templateName' => 'required|max:160', 'templateSections' => 'required|string|max:20000']);
+        $titles = array_values(array_filter(array_map('trim', preg_split('/\R/u', $this->templateSections))));
+        if (!$titles || count($titles) > 100) throw ValidationException::withMessages(['templateSections' => '1–100 judul bagian diperlukan.']);
+        $sections = [];
+        foreach ($titles as $i => $title) $sections[] = [
+            'code' => 's'.($i+1), 'title' => $title, 'required' => true,
+        ];
+        $template = BookTemplate::create([
+            'organization_id' => $this->orgId(), 'name' => $this->templateName, 'sections' => $sections,
+        ]);
+        $this->newTemplateId = $template->id;
+        $this->audit()->record($this->orgId(), (int)auth()->id(), 'template.created', 'book_template', $template->id);
+        $this->notify('success', 'Template dibuat tanpa isi contoh organisasi.');
+    }
+
+    public function createBook(): void
+    {
+        $this->access()->requireRole($this->orgId(), (int)auth()->id(), ['owner','admin','editor']);
+        $cycle = $this->cycle();
+        $this->validate(['newTemplateId' => 'required|integer', 'bookTitle' => 'required|max:160']);
+        $template = BookTemplate::query()->where('organization_id', $this->orgId())
+            ->where('active', true)->findOrFail($this->newTemplateId);
+        $book = DB::transaction(function () use ($cycle, $template) {
+            $book = Book::create([
+                'organization_id' => $this->orgId(), 'cycle_id' => $cycle->id,
+                'template_id' => $template->id, 'title' => $this->bookTitle,
+            ]);
+            foreach ($template->sections as $i => $section) {
+                BookSection::create([
+                    'book_id' => $book->id, 'code' => $section['code'],
+                    'title' => $section['title'], 'position' => $i,
+                    'required' => (bool)($section['required'] ?? false),
+                ]);
+            }
+            $this->audit()->record($this->orgId(), (int)auth()->id(), 'book.created', 'book', $book->id);
+            return $book;
+        });
+        $this->bookId = $book->id;
+        $this->bookTitle = '';
+        $this->notify('success', 'Draft buku dibuat.');
+    }
+
+    public function selectBook(int $id): void
+    {
+        $book = Book::query()->where('organization_id', $this->orgId())
+            ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
+        $this->access()->requireRole($book->organization_id, (int)auth()->id(),
+            ['owner','admin','editor','reviewer','publisher']);
+        $this->bookId = $id; $this->sectionId = null;
+    }
+
+    public function selectSection(int $id): void
+    {
+        $section = $this->book()->sections()->findOrFail($id);
+        $this->sectionId = $section->id;
+        $this->sectionContent = $section->content ?? '';
+    }
+
+    public function saveSection(): void
+    {
+        $section = $this->book()->sections()->findOrFail($this->sectionId);
+        $this->validate(['sectionContent' => 'required|string|max:1000000']);
+        app(BookPublishingService::class)->saveSection($section, (int)auth()->id(), $this->sectionContent);
+        $this->notify('success', 'Bagian dikirim ke review.');
+    }
+
+    public function approveSection(int $id): void
+    {
+        $section = $this->book()->sections()->findOrFail($id);
+        app(BookPublishingService::class)->approveSection($section, (int)auth()->id());
+        $this->notify('success', 'Bagian disetujui.');
+    }
+
+    public function publishBook(): void
+    {
+        app(BookPublishingService::class)->publish($this->book(), (int)auth()->id());
+        $this->notify('success', 'Snapshot Buku RKA telah diterbitkan.');
+    }
+
+    protected function getViewData(): array
+    {
+        $memberships = Membership::query()->where('user_id', auth()->id())->where('active', true)->get();
+        $organizations = Organization::query()->whereIn('id', $memberships->pluck('organization_id'))->orderBy('name')->get();
+        $data = [
+            'organizations' => $organizations,
+            'canBootstrap' => auth()->user()->hasAnyRole(['superadmin','admin-keuangan']),
+            'org' => null, 'isManager' => false, 'isFinance' => false,
+            'units' => collect(), 'users' => collect(), 'cycles' => collect(), 'questions' => collect(),
+            'instances' => collect(), 'invitations' => collect(), 'answers' => collect(), 'syntheses' => collect(),
+            'books' => collect(), 'bookSections' => collect(), 'templates' => collect(),
+            'budgets' => collect(), 'pools' => collect(), 'batches' => collect(), 'conflicts' => collect(),
+        ];
+        if (!$this->organizationId) return $data;
+        $orgId = $this->orgId();
+        $data['org'] = Organization::findOrFail($orgId);
+        $data['isManager'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin']);
+        $data['isFinance'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','finance']);
+        $data['units'] = Unit::where('organization_id', $orgId)->orderBy('name')->get();
+        $memberIds = Membership::where('organization_id', $orgId)->where('active', true)->pluck('user_id');
+        $data['users'] = User::whereIn('id', $memberIds)->orderBy('name')->get(['id','name','email']);
+        $data['cycles'] = Cycle::where('organization_id', $orgId)->orderByDesc('year')->get();
+        $data['questions'] = Question::where('organization_id', $orgId)->where('active', true)->orderBy('code')->get();
+        $data['templates'] = BookTemplate::where('organization_id', $orgId)->orderBy('name')->get();
+        $data['batches'] = $data['isFinance'] ? JournalBatch::where('organization_id', $orgId)->latest()->limit(12)->get() : collect();
+        if ($this->cycleId) {
+            $cycle = $this->cycle();
+            $data['instances'] = QuestionInstance::where('organization_id', $orgId)->where('cycle_id', $cycle->id)
+                ->where(function ($query) use ($orgId) {
+                    if ($this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','editor','reviewer'])) return;
+                    $query->where('owner_user_id', auth()->id())
+                        ->orWhereHas('invitations', fn ($q) => $q->where('invited_user_id', auth()->id())
+                            ->whereIn('status', ['invited','accepted','completed'])->where('expires_at', '>', now()));
+                })->orderByDesc('id')->get();
+            $data['books'] = $this->access()->hasRole($orgId, (int)auth()->id(),
+                ['owner','admin','editor','reviewer','publisher'])
+                ? Book::where('organization_id', $orgId)->where('cycle_id', $cycle->id)->latest()->get()
+                : collect();
+            $data['budgets'] = $data['isFinance'] ? BudgetLine::where('organization_id', $orgId)
+                ->where('cycle_id', $cycle->id)->orderByDesc('id')->limit(30)->get() : collect();
+            $data['pools'] = $data['isFinance'] ? SharedPool::where('organization_id', $orgId)
+                ->where('cycle_id', $cycle->id)->orderByDesc('id')->get() : collect();
+            $data['conflicts'] = $data['isManager'] ? NarrativeConflict::where('organization_id', $orgId)
+                ->whereHas('instance', fn ($q) => $q->where('cycle_id', $cycle->id))
+                ->where('status','open')->count() : 0;
+        }
+        if ($this->instanceId) {
+            $instance = $this->instance();
+            $data['invitations'] = $instance->invitations()->where(function ($q) {
+                if ($this->access()->hasRole($this->orgId(), (int)auth()->id(), ['owner','admin','editor']) ||
+                    $this->instance()->owner_user_id === (int)auth()->id()) return;
+                $q->where('invited_user_id', auth()->id());
+            })->get();
+            $data['answers'] = $instance->answers()->orderBy('author_id')->orderByDesc('revision')->get()
+                ->unique('author_id')->values();
+            $data['syntheses'] = $instance->syntheses()->orderByDesc('version')->get();
+        }
+        if ($this->bookId) {
+            $data['bookSections'] = $this->book()->sections()->get();
+        }
+        return $data;
+    }
+}
