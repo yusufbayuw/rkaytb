@@ -76,12 +76,19 @@ class SharedCostAllocator
     public function saveDraft(SharedPool $pool, int $userId, TenantAccess $access, AuditTrail $audit): array
     {
         $access->requireRole($pool->organization_id, $userId, ['owner','admin','finance']);
-        if ($pool->status !== 'draft') throw ValidationException::withMessages(['pool' => 'Alokasi yang sudah disahkan tidak dapat ditimpa.']);
-        $results = $this->preview($pool);
-        DB::transaction(function () use ($pool, $results, $userId, $audit) {
-            $pool->update(['allocations' => $results, 'version' => $pool->version + 1]);
-            $audit->record($pool->organization_id, $userId, 'shared_pool.calculated', 'shared_pool', $pool->id, ['version' => $pool->version]);
+        return DB::transaction(function () use ($pool, $userId, $audit) {
+            $locked = SharedPool::where('organization_id', $pool->organization_id)
+                ->whereKey($pool->id)->lockForUpdate()->firstOrFail();
+            $cycle = \App\Models\RkaPlatform\Cycle::where('organization_id', $locked->organization_id)
+                ->whereKey($locked->cycle_id)->firstOrFail();
+            if ($locked->status !== 'draft' || $cycle->status !== 'draft') {
+                throw ValidationException::withMessages(['pool' => 'Alokasi atau siklus sudah disahkan; tidak dapat ditimpa.']);
+            }
+            $results = $this->preview($locked);
+            $locked->update(['allocations' => $results, 'version' => $locked->version + 1]);
+            $audit->record($locked->organization_id, $userId, 'shared_pool.calculated',
+                'shared_pool', $locked->id, ['version' => $locked->version]);
+            return $results;
         });
-        return $results;
     }
 }
