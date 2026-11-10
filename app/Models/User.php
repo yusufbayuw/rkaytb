@@ -49,6 +49,15 @@ class User extends Authenticatable implements FilamentUser
 
     public function canAccessFilament(): bool
     {
-        return true;
+        // Keep existing role-based and unit-based users working. An account with
+        // no role, unit or active RKA membership should not reach the admin panel.
+        if ($this->roles()->exists() || $this->unit_id !== null) {
+            return true;
+        }
+
+        return \App\Models\RkaPlatform\Membership::query()
+            ->where('user_id', $this->getKey())
+            ->where('active', true)
+            ->exists();
     }
 }
