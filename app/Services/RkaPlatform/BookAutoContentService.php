@@ -59,6 +59,8 @@ class BookAutoContentService
                 ['Baris jurnal posted', $report['posted_line_count'] ?? 0],
                 ['Jumlah sumber jurnal', $report['source_batch_count'] ?? 0],
                 ['Jumlah blocker setelah verifikasi', $report['blocker_count'] ?? 0],
+                ['Jumlah pengecualian administratif disetujui', $report['approved_exception_count'] ?? 0],
+                ['Nominal anggaran yang dikecualikan (unit minor)', $report['excluded_budget_minor'] ?? 0],
                 ['Versi closing', $closing['version'] ?? ''],
                 ['Hash sumber', $closing['source_hash'] ?? ''],
                 ['Hash laporan', $closing['report_hash'] ?? ''],
