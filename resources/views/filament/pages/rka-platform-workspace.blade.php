@@ -587,7 +587,7 @@
                         <div class="mt-3 space-y-2">
                             @foreach($unitConsentPools as $pool)
                                 <div class="border-b dark:border-gray-700 py-2 flex flex-wrap gap-2 items-center justify-between text-sm">
-                                    <span>{{ $pool->name }} · Versi {{ $pool->version }} · Dibebankan {{ ($pool->allocations ?? [])[(string)$this->access()->membership($org->id, (int)auth()->id())->unit_id] ?? '-' }} · {{ $pool->status }}</span>
+                                    <span>{{ $pool->name }} · Versi {{ $pool->version }} · Dibebankan {{ ($pool->allocations ?? [])[(string)$myUnitId] ?? '-' }} · {{ $pool->status }}</span>
                                     @if(in_array($pool->id, $signedPoolIds))
                                         <span class="font-medium text-green-700">Disetujui unit</span>
                                     @elseif($pool->status === 'draft' && $cycleCurrent?->status === 'draft' && $pool->created_by !== auth()->id())
