@@ -142,6 +142,21 @@ class ContributionService
                 NarrativeConflict::query()->where('instance_id', $instance->id)->where('status', 'open')->exists()) {
                 throw ValidationException::withMessages(['synthesis' => 'Ada konflik atau pertanyaan sudah ditutup.']);
             }
+            // A synthesis cannot be approved from superseded answer revisions.
+            $sources = Answer::query()->where('instance_id', $instance->id)
+                ->whereIn('id', $synthesis->source_answer_ids)->get();
+            if ($sources->count() !== count($synthesis->source_answer_ids)) {
+                throw ValidationException::withMessages(['synthesis' => 'Ada jawaban sumber yang tidak tersedia.']);
+            }
+            foreach ($sources as $answer) {
+                $latestRevision = Answer::query()->where('instance_id', $instance->id)
+                    ->where('author_id', $answer->author_id)->max('revision');
+                if ($answer->revision !== (int)$latestRevision) {
+                    throw ValidationException::withMessages([
+                        'synthesis' => 'Jawaban sumber sudah diperbarui. Susun ulang sintesis dari revisi terbaru.',
+                    ]);
+                }
+            }
             $question = $instance->question;
             $policy = $question->evidence_policy ?? [];
             if (($policy['required'] ?? false) === true) {
