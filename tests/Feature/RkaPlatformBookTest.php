@@ -13,7 +13,7 @@ class RkaPlatformBookTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_published_book_is_a_frozen_snapshot_after_independent_review(): void
+    public function test_book_editorial_approval_does_not_bypass_financial_closing(): void
     {
         $org = Organization::create(['name' => 'Example organization', 'slug' => 'example-organization']);
         $editor = User::factory()->create();
@@ -41,9 +41,12 @@ class RkaPlatformBookTest extends TestCase
         }
         $service->saveSection($section, $editor->id, 'A factual introduction.');
         $service->approveSection($section->fresh(), $reviewer->id);
-        $book = $service->publish($book->fresh(), $publisher->id);
-        $this->assertSame('published', $book->status);
-        $this->assertSame('A factual introduction.', $book->snapshot['sections'][0]['content']);
-        $this->assertNotEmpty($book->snapshot['sha256']);
+        try {
+            $service->publish($book->fresh(), $publisher->id);
+            $this->fail('Publishing requires fully approved financial closing, not only editorial review.');
+        } catch (ValidationException $expected) {
+            $this->assertNotEmpty($expected->errors());
+        }
+        $this->assertSame('draft', $book->fresh()->status);
     }
 }
