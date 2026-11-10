@@ -34,7 +34,7 @@ class TenantAccess
     public function canReadInstance(QuestionInstance $instance, int $userId): bool
     {
         $this->membership($instance->organization_id, $userId);
-        if ($instance->owner_user_id === $userId ||
+        if ($instance->owner_user_id === $userId || $instance->reviewer_user_id === $userId ||
             $this->hasRole($instance->organization_id, $userId, ['owner', 'admin'])) {
             return true;
         }
@@ -50,20 +50,43 @@ class TenantAccess
         }
     }
 
-    public function requireAnswerInstance(QuestionInstance $instance, int $userId): void
+    public function canAnswerInstance(QuestionInstance $instance, int $userId): bool
     {
         $this->membership($instance->organization_id, $userId);
-        if ($instance->status !== 'open') {
-            throw new AuthorizationException('Pertanyaan tidak lagi terbuka.');
-        }
+        if ($instance->status !== 'open') return false;
         if ($instance->owner_user_id === $userId ||
-            $this->hasRole($instance->organization_id, $userId, ['owner', 'admin'])) {
-            return;
-        }
-        $allowed = $instance->invitations()->where('invited_user_id', $userId)
+            $this->hasRole($instance->organization_id, $userId, ['owner', 'admin'])) return true;
+        return $instance->invitations()->where('invited_user_id', $userId)
             ->where('status', 'accepted')->where('expires_at', '>', now())->exists();
-        if (!$allowed) {
-            throw new AuthorizationException('Undangan belum diterima atau tidak berlaku.');
+    }
+
+    public function requireAnswerInstance(QuestionInstance $instance, int $userId): void
+    {
+        if (!$this->canAnswerInstance($instance, $userId)) {
+            throw new AuthorizationException('Pertanyaan tertutup atau undangan tidak berlaku.');
+        }
+    }
+
+    public function canViewAnswers(QuestionInstance $instance, int $userId): bool
+    {
+        $this->membership($instance->organization_id, $userId);
+        return $instance->owner_user_id === $userId || $instance->reviewer_user_id === $userId ||
+            $this->hasRole($instance->organization_id, $userId, ['owner', 'admin']);
+    }
+
+    public function canReviewInstance(QuestionInstance $instance, int $userId): bool
+    {
+        $this->membership($instance->organization_id, $userId);
+        if ($instance->reviewer_user_id === $userId) {
+            return $this->hasRole($instance->organization_id, $userId, ['reviewer', 'owner', 'admin']);
+        }
+        return $this->hasRole($instance->organization_id, $userId, ['owner', 'admin']);
+    }
+
+    public function requireReviewInstance(QuestionInstance $instance, int $userId): void
+    {
+        if (!$this->canReviewInstance($instance, $userId)) {
+            throw new AuthorizationException('Tidak ditugaskan memverifikasi pertanyaan ini.');
         }
     }
 }

@@ -2,7 +2,7 @@
 
 namespace App\Services\RkaPlatform;
 
-use App\Models\RkaPlatform\{Answer, Invitation, QuestionInstance, Synthesis, NarrativeConflict};
+use App\Models\RkaPlatform\{Answer, Invitation, QuestionInstance, Synthesis, NarrativeConflict, EvidenceRecord};
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -16,7 +16,7 @@ class ContributionService
         $this->access->requireReadInstance($instance, $inviterId);
         $this->access->membership($instance->organization_id, $inviteeId);
         if ($instance->owner_user_id !== $inviterId) {
-            $this->access->requireRole($instance->organization_id, $inviterId, ['owner', 'admin', 'editor']);
+            $this->access->requireRole($instance->organization_id, $inviterId, ['owner', 'admin']);
         }
         if ($instance->status !== 'open' || $days < 1 ||
             $days > config('rka_platform.invitation_max_days', 30)) {
@@ -51,6 +51,18 @@ class ContributionService
         $this->audit->record($invite->organization_id, $userId, 'invitation.accepted', 'invitation', $invite->id);
     }
 
+    public function revoke(Invitation $invite, int $actorId): void
+    {
+        $instance = $invite->instance;
+        $this->access->requireReadInstance($instance, $actorId);
+        if ($instance->owner_user_id !== $actorId) {
+            $this->access->requireRole($instance->organization_id, $actorId, ['owner', 'admin']);
+        }
+        if (in_array($invite->status, ['revoked', 'expired'], true)) return;
+        $invite->update(['status' => 'revoked']);
+        $this->audit->record($instance->organization_id, $actorId, 'invitation.revoked', 'invitation', $invite->id);
+    }
+
     public function submitAnswer(QuestionInstance $instance, int $userId, string $content, ?int $expectedRevision, array $evidence = []): Answer
     {
         if (!trim($content) || mb_strlen($content) > 100000) {
@@ -68,10 +80,11 @@ class ContributionService
             if ($expectedRevision !== $revision) {
                 throw ValidationException::withMessages(['answer' => 'Jawaban telah berubah. Muat ulang sebelum menyimpan.']);
             }
+            // Evidence must be uploaded privately and independently verified; never trust client-supplied references.
             $answer = Answer::create([
                 'organization_id' => $instance->organization_id, 'instance_id' => $instance->id,
                 'author_id' => $userId, 'revision' => $revision + 1,
-                'content' => $content, 'evidence' => $evidence, 'status' => 'submitted',
+                'content' => $content, 'evidence' => [], 'status' => 'submitted',
             ]);
             $this->audit->record($instance->organization_id, $userId, 'answer.submitted', 'answer', $answer->id, ['revision' => $answer->revision]);
             return $answer;
@@ -111,9 +124,11 @@ class ContributionService
 
     public function verify(Synthesis $synthesis, int $reviewerId): void
     {
-        $this->access->requireRole($synthesis->organization_id, $reviewerId, ['owner', 'admin', 'reviewer']);
         $instance = QuestionInstance::query()->findOrFail($synthesis->instance_id);
-        $this->access->requireReadInstance($instance, $reviewerId);
+        if ($instance->organization_id !== $synthesis->organization_id) {
+            throw new AuthorizationException('Organisasi sintesis tidak cocok.');
+        }
+        $this->access->requireReviewInstance($instance, $reviewerId);
         if ($synthesis->author_id === $reviewerId) {
             throw new AuthorizationException('Pemeriksa tidak boleh menyetujui sintesisnya sendiri.');
         }
@@ -130,9 +145,15 @@ class ContributionService
             $question = $instance->question;
             $policy = $question->evidence_policy ?? [];
             if (($policy['required'] ?? false) === true) {
-                $count = Answer::query()->whereIn('id', $synthesis->source_answer_ids)
-                    ->get()->filter(fn ($a) => count($a->evidence ?? []) > 0)->count();
-                if ($count < 1) throw ValidationException::withMessages(['synthesis' => 'Bukti wajib belum tersedia.']);
+                $answerIds = Answer::query()->where('instance_id', $instance->id)
+                    ->whereIn('id', $synthesis->source_answer_ids)->pluck('id')->all();
+                $verified = EvidenceRecord::query()->where('instance_id', $instance->id)
+                    ->whereIn('answer_id', $answerIds)->where('status', 'verified')
+                    ->distinct()->pluck('answer_id')->all();
+                if (count($answerIds) !== count($synthesis->source_answer_ids) ||
+                    count(array_diff($answerIds, $verified)) > 0) {
+                    throw ValidationException::withMessages(['synthesis' => 'Setiap jawaban sumber memerlukan bukti terverifikasi.']);
+                }
             }
             $synthesis->update(['status' => 'verified', 'verified_by' => $reviewerId, 'verified_at' => now()]);
             $instance->update(['status' => 'verified']);
