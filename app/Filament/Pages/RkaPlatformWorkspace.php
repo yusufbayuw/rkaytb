@@ -87,6 +87,7 @@ class RkaPlatformWorkspace extends Page
     public string $legacySource = 'investment';
     public ?int $legacyUnitId = null;
     public array $legacyPreview = [];
+    public string $kpiProfileJson = '{"income_categories":[],"expense_categories":[]}';
 
     public function mount(): void
     {
@@ -96,6 +97,7 @@ class RkaPlatformWorkspace extends Page
             $this->cycleId = Cycle::query()->where('organization_id', $this->organizationId)
                 ->latest('id')->value('id');
             $this->loadBranding();
+            $this->loadKpiProfile();
         }
     }
 
@@ -168,6 +170,7 @@ class RkaPlatformWorkspace extends Page
         $this->cycleId = Cycle::query()->where('organization_id', $id)->latest('id')->value('id');
         $this->instanceId = $this->bookId = $this->sectionId = null;
         $this->loadBranding();
+        $this->loadKpiProfile();
     }
 
     private function loadBranding(): void
@@ -237,6 +240,36 @@ class RkaPlatformWorkspace extends Page
         $this->notify('success', 'Unit dibuat.');
     }
 
+    private function loadKpiProfile(): void
+    {
+        if (!$this->organizationId || !$this->cycleId) return;
+        $cycle = Cycle::where('organization_id', $this->orgId())->find($this->cycleId);
+        $this->kpiProfileJson = json_encode(($cycle?->settings ?? [])['kpi_profile'] ??
+            ['income_categories' => [], 'expense_categories' => []], JSON_UNESCAPED_UNICODE);
+    }
+
+    public function saveKpiProfile(): void
+    {
+        $this->access()->requireRole($this->orgId(), (int)auth()->id(), ['owner','admin','finance']);
+        $cycle = $this->cycle();
+        try {
+            $profile = json_decode($this->kpiProfileJson, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw ValidationException::withMessages(['kpiProfileJson' => 'Format profil harus JSON yang valid.']);
+        }
+        if (!is_array($profile)) {
+            throw ValidationException::withMessages(['kpiProfileJson' => 'Profil KPI harus berupa objek JSON.']);
+        }
+        app(\App\Services\RkaPlatform\KpiBudgetPreviewService::class)->validateProfile($profile);
+        if ($cycle->status !== 'draft' || BudgetLine::where('organization_id', $cycle->organization_id)
+            ->where('cycle_id', $cycle->id)->where('status', 'approved')->exists()) {
+            throw ValidationException::withMessages(['kpiProfileJson' => 'Profil dikunci setelah anggaran disetujui.']);
+        }
+        $cycle->update(['settings' => array_merge($cycle->settings ?? [], ['kpi_profile' => $profile])]);
+        $this->audit()->record($cycle->organization_id, (int)auth()->id(), 'kpi_profile.updated', 'cycle', $cycle->id);
+        $this->notify('success', 'Profil KPI disimpan untuk siklus ini.');
+    }
+
     public function createCycle(): void
     {
         $this->managers();
@@ -249,6 +282,7 @@ class RkaPlatformWorkspace extends Page
             'starts_on' => $this->cycleStart, 'ends_on' => $this->cycleEnd,
         ]);
         $this->cycleId = $cycle->id;
+        $this->loadKpiProfile();
         $this->audit()->record($this->orgId(), (int)auth()->id(), 'cycle.created', 'cycle', $cycle->id);
         $this->notify('success', 'Siklus RKA dibuat.');
     }
@@ -258,6 +292,7 @@ class RkaPlatformWorkspace extends Page
         Cycle::query()->where('organization_id', $this->orgId())->findOrFail($id);
         $this->cycleId = $id;
         $this->instanceId = $this->bookId = $this->sectionId = null;
+        $this->loadKpiProfile();
     }
 
     public function previewLegacy(): void
@@ -576,6 +611,7 @@ class RkaPlatformWorkspace extends Page
             'isInstanceOwner' => false, 'canAnswer' => false, 'canReview' => false,
             'canEditBook' => false, 'canApproveBookSection' => false, 'evidence' => collect(),
             'canPreviewLegacy' => false, 'legacyUnits' => collect(),
+            'kpiPreview' => null,
             'units' => collect(), 'users' => collect(), 'cycles' => collect(), 'questions' => collect(),
             'instances' => collect(), 'invitations' => collect(), 'answers' => collect(), 'syntheses' => collect(),
             'books' => collect(), 'bookSections' => collect(), 'templates' => collect(),
@@ -617,6 +653,10 @@ class RkaPlatformWorkspace extends Page
                 ->where('cycle_id', $cycle->id)->orderByDesc('id')->limit(30)->get() : collect();
             $data['pools'] = $data['isFinance'] ? SharedPool::where('organization_id', $orgId)
                 ->where('cycle_id', $cycle->id)->orderByDesc('id')->get() : collect();
+            $kpiProfile = ($cycle->settings ?? [])['kpi_profile'] ?? null;
+            if ($data['isFinance'] && is_array($kpiProfile)) {
+                $data['kpiPreview'] = app(\App\Services\RkaPlatform\KpiBudgetPreviewService::class)->preview($cycle, $kpiProfile);
+            }
             $data['conflicts'] = $data['isManager'] ? NarrativeConflict::where('organization_id', $orgId)
                 ->whereHas('instance', fn ($q) => $q->where('cycle_id', $cycle->id))
                 ->where('status','open')->count() : 0;
