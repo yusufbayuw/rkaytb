@@ -8,6 +8,8 @@ class QuestionInstance extends Model
 {
     protected $table = 'rka_question_instances';
     protected $guarded = [];
+    // Match database defaults before a newly created record is reloaded.
+    protected $attributes = ['status' => 'open'];
     protected $casts = [
         'rules_snapshot' => 'array',
         'due_at' => 'datetime',

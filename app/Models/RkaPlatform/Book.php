@@ -8,6 +8,8 @@ class Book extends Model
 {
     protected $table = 'rka_books';
     protected $guarded = [];
+    // Match database defaults before a newly created record is reloaded.
+    protected $attributes = ['status' => 'draft'];
     protected $casts = [
         'snapshot' => 'array',
         'published_at' => 'datetime',
