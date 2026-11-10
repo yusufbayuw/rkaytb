@@ -2,7 +2,7 @@
 
 namespace App\Services\RkaPlatform;
 
-use App\Models\RkaPlatform\{BudgetLine, SharedPool};
+use App\Models\RkaPlatform\{BudgetLine, SharedPool, Cycle};
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -16,6 +16,10 @@ class FinancialApprovalService
         $this->access->requireRole($line->organization_id, $reviewerId, ['owner','admin','finance']);
         return DB::transaction(function () use ($line, $reviewerId) {
             $locked = BudgetLine::query()->lockForUpdate()->findOrFail($line->id);
+            if (Cycle::where('organization_id', $locked->organization_id)->whereKey($locked->cycle_id)
+                ->where('status', 'draft')->doesntExist()) {
+                throw ValidationException::withMessages(['budget' => 'Periode tidak dapat disahkan setelah closing.']);
+            }
             if ($locked->status !== 'draft') {
                 throw ValidationException::withMessages(['budget' => 'Anggaran tidak berada dalam status draft.']);
             }
@@ -33,6 +37,10 @@ class FinancialApprovalService
         $this->access->requireRole($pool->organization_id, $reviewerId, ['owner','admin','finance']);
         return DB::transaction(function () use ($pool, $reviewerId) {
             $locked = SharedPool::query()->lockForUpdate()->findOrFail($pool->id);
+            if (Cycle::where('organization_id', $locked->organization_id)->whereKey($locked->cycle_id)
+                ->where('status', 'draft')->doesntExist()) {
+                throw ValidationException::withMessages(['pool' => 'Periode tidak dapat disahkan setelah closing.']);
+            }
             if ($locked->status !== 'draft' || empty($locked->allocations)) {
                 throw ValidationException::withMessages(['pool' => 'Alokasi belum lengkap atau tidak lagi draft.']);
             }
