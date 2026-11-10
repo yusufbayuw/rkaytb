@@ -5,9 +5,9 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Models\RkaPlatform\{
     Organization, Membership, Unit, Cycle, BudgetLine, SharedPool,
-    JournalBatch, JournalLine, ApprovalPolicy, ApprovalRequest
+    JournalBatch, JournalLine, ApprovalPolicy, ApprovalRequest, Book, BookTemplate, BookSection
 };
-use App\Services\RkaPlatform\{FinancialReconciliationService, FinancialClosingService};
+use App\Services\RkaPlatform\{FinancialReconciliationService, FinancialClosingService, BookPublishingService};
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -196,4 +196,58 @@ class RkaPlatformAccountingCloseTest extends TestCase
         $this->assertSame($original->report_hash, DB::table('rka_cycle_closings')->first()->report_hash);
         $this->assertSame(1, DB::table('rka_cycle_closings')->count());
     }
+    public function test_book_publication_is_bound_to_verified_close_and_automatic_blocks(): void
+    {
+        $f = $this->fixture();
+        $recon = app(FinancialReconciliationService::class);
+        $run = $recon->prepare($f['cycle'], $f['author']->id);
+        $recon->verify($f['cycle'], $run, $f['checker']->id);
+        $this->policies($f);
+        $closer = app(FinancialClosingService::class);
+        $req = $closer->request($f['cycle'], $f['submitter']->id, 'cycle.close',
+            'Final finance and budget verification before book publication');
+        $closer->decide($req, $f['approverOne']->id, true);
+        $closer->decide($req, $f['approverTwo']->id, true);
+
+        $template = BookTemplate::create([
+            'organization_id' => $f['org']->id, 'name' => 'Flexible plan',
+            'sections' => [
+                ['code' => 'intro', 'title' => 'Overview', 'required' => true, 'block_type' => 'narrative'],
+                ['code' => 'statement', 'title' => 'Consolidated Budget', 'required' => true, 'block_type' => 'consolidated'],
+                ['code' => 'kpi', 'title' => 'Unit KPI', 'required' => true, 'block_type' => 'unit_kpi'],
+            ],
+        ]);
+        $book = Book::create([
+            'organization_id' => $f['org']->id, 'cycle_id' => $f['cycle']->id,
+            'template_id' => $template->id, 'title' => 'Example annual plan',
+        ]);
+        $intro = BookSection::create([
+            'book_id' => $book->id, 'code' => 'intro', 'title' => 'Overview',
+            'block_type' => 'narrative', 'required' => true, 'status' => 'draft', 'position' => 0,
+        ]);
+        $statement = BookSection::create([
+            'book_id' => $book->id, 'code' => 'statement', 'title' => 'Consolidated Budget',
+            'block_type' => 'consolidated', 'required' => true, 'status' => 'review', 'position' => 1,
+        ]);
+        $kpi = BookSection::create([
+            'book_id' => $book->id, 'code' => 'kpi', 'title' => 'Unit KPI',
+            'block_type' => 'unit_kpi', 'required' => true, 'status' => 'review', 'position' => 2,
+        ]);
+        config()->set('rka_platform.enable_official_publication', true);
+        $publisher = app(BookPublishingService::class);
+        $publisher->saveSection($intro, $f['admin']->id, 'The 2035 financial plan.');
+        $publisher->approveSection($intro->fresh(), $f['owner']->id);
+        $publisher->approveSection($statement, $f['owner']->id);
+        $publisher->approveSection($kpi, $f['owner']->id);
+        $published = $publisher->publish($book, $f['owner']->id);
+        $snapshot = $published->snapshot;
+        $this->assertSame('published', $published->status);
+        $this->assertSame('300.00', $snapshot['financial_report']['consolidated']['surplus']);
+        $this->assertSame('consolidated', $snapshot['sections'][1]['block_type']);
+        $this->assertSame('unit_kpi', $snapshot['sections'][2]['block_type']);
+        $this->assertNotEmpty($snapshot['closing']['source_hash']);
+        $this->assertSame($f['org']->currency, $snapshot['currency']);
+        $this->assertNotEmpty($snapshot['sha256']);
+    }
+
 }
