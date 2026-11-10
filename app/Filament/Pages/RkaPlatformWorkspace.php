@@ -562,7 +562,8 @@ class RkaPlatformWorkspace extends Page
             'organizations' => $organizations,
             'canBootstrap' => auth()->user()->hasAnyRole(['superadmin','admin-keuangan']),
             'org' => null, 'isManager' => false, 'isFinance' => false,
-            'isInstanceOwner' => false, 'canAnswer' => false, 'canReview' => false, 'evidence' => collect(),
+            'isInstanceOwner' => false, 'canAnswer' => false, 'canReview' => false,
+            'canEditBook' => false, 'canApproveBookSection' => false, 'evidence' => collect(),
             'units' => collect(), 'users' => collect(), 'cycles' => collect(), 'questions' => collect(),
             'instances' => collect(), 'invitations' => collect(), 'answers' => collect(), 'syntheses' => collect(),
             'books' => collect(), 'bookSections' => collect(), 'templates' => collect(),
@@ -573,6 +574,8 @@ class RkaPlatformWorkspace extends Page
         $data['org'] = Organization::findOrFail($orgId);
         $data['isManager'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin']);
         $data['isFinance'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','finance']);
+        $data['canEditBook'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','editor']);
+        $data['canApproveBookSection'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','reviewer']);
         $data['units'] = Unit::where('organization_id', $orgId)->orderBy('name')->get();
         $memberIds = Membership::where('organization_id', $orgId)->where('active', true)->pluck('user_id');
         $data['users'] = User::whereIn('id', $memberIds)->orderBy('name')->get(['id','name','email']);

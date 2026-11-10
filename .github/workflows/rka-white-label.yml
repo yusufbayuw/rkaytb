@@ -40,5 +40,7 @@ jobs:
           DB_CONNECTION: sqlite
           DB_DATABASE: ':memory:'
         run: php artisan test --filter=RkaPlatform
+      - name: Check Filament Blade views
+        run: php artisan view:cache
       - name: Check routes
         run: php artisan route:list --path=rka-platform

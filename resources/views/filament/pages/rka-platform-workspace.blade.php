@@ -381,14 +381,14 @@
                                         <div class="flex flex-wrap items-center justify-between gap-2 border-b dark:border-gray-600 py-2 text-sm">
                                             <button wire:click="selectSection({{ $section->id }})" class="text-left underline">{{ $section->title }}</button>
                                             <span>{{ $section->status }}</span>
-                                            @if($section->status === 'review' && $section->last_edited_by !== auth()->id())
+                                            @if($canApproveBookSection && $section->status === 'review' && $section->last_edited_by !== auth()->id())
                                                 <button wire:click="approveSection({{ $section->id }})" class="px-2 py-1 border rounded">Setujui</button>
                                             @endif
                                         </div>
                                     @endforeach
                                 </div>
                                 @if($sectionId)
-                                    @if($isManager || $org && \App\Models\RkaPlatform\Membership::where('organization_id', $org->id)->where('user_id', auth()->id())->where('active', true)->get()->contains(fn ($m) => in_array('editor', $m->roles ?? [])))
+                                    @if($canEditBook)
                                     <form wire:submit.prevent="saveSection" class="mt-4 space-y-2">
                                         <label class="font-medium text-sm">Isi bagian terpilih</label>
                                         <textarea wire:model.defer="sectionContent" rows="7" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Narasi bagian buku"></textarea>
