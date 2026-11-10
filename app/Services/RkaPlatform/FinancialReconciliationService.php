@@ -3,7 +3,7 @@
 namespace App\Services\RkaPlatform;
 
 use App\Models\RkaPlatform\{
-    BudgetLine, Cycle, JournalBatch, JournalLine, SharedPool, Unit
+    BudgetLine, Cycle, JournalBatch, JournalLine, SharedPool, Unit, Organization
 };
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
@@ -298,7 +298,7 @@ class FinancialReconciliationService
         return [
             'source_hash' => $sourceHash,
             'report' => [
-                'cycle_id' => $cycle->id, 'currency' => $cycle->organization_id,
+                'cycle_id' => $cycle->id, 'currency' => Organization::whereKey($org)->value('currency'),
                 'period' => [$from,$until], 'posted_line_count' => $postedCount,
                 'total_imported_lines' => $journal->count(),
                 'source_batch_count' => $batches->count(),
