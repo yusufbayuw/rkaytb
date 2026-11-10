@@ -74,6 +74,7 @@ class FinancialClosingService
             }
             if ($locked->active) $this->fail('Kebijakan sudah aktif.');
             $this->checkSteps($locked->steps ?? []);
+            app(OrganizationRoleCatalog::class)->validateApprovalRoles($locked->organization_id, $locked->steps);
             $risk = ($locked->conditions ?? [])['risk'] ?? 'normal';
             foreach (ApprovalPolicy::where('organization_id', $locked->organization_id)
                 ->where('action', $locked->action)->where('active', true)->get() as $other) {
