@@ -5,6 +5,14 @@ on:
     paths:
       - 'app/Models/RkaPlatform/**'
       - 'app/Services/RkaPlatform/**'
+      - 'app/Filament/Pages/**'
+      - 'app/Http/Controllers/RkaPlatformEvidenceController.php'
+      - 'config/rka_platform.php'
+      - 'config/filament.php'
+      - 'composer.json'
+      - 'composer.lock'
+      - '.env.example'
+      - 'resources/views/filament/pages/**'
       - 'app/Filament/Pages/RkaPlatformWorkspace.php'
       - 'app/Http/Controllers/RkaPlatformExportController.php'
       - 'database/migrations/2026_11_10_*'
@@ -29,6 +37,7 @@ jobs:
       - name: PHP syntax lint (independent of Composer)
         run: |
           find app/Models/RkaPlatform app/Services/RkaPlatform tests/Unit/RkaPlatform* tests/Feature/RkaPlatform* app/Http/Controllers/RkaPlatformExportController.php app/Filament/Pages/RkaPlatformWorkspace.php database/migrations/2026_11_10_* -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - run: composer validate --no-check-publish
       - run: composer install --no-interaction --prefer-dist --no-progress
       - name: Prepare app environment
         run: |
@@ -44,3 +53,43 @@ jobs:
         run: php artisan view:cache
       - name: Check routes
         run: php artisan route:list --path=rka-platform
+  mysql:
+    name: MySQL 8 migration and regression
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-password
+          MYSQL_DATABASE: rka_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptest-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, dom, fileinfo, pdo_mysql, zip, gd, intl
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Prepare isolated test environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
+      - name: Test migrations and RKA regression
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: rka_test
+          DB_USERNAME: root
+          DB_PASSWORD: test-password
+          CACHE_DRIVER: array
+          SESSION_DRIVER: array
+        run: php artisan test --filter=RkaPlatform
