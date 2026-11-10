@@ -9,7 +9,7 @@ class KpiBudgetPreviewService
 {
     public function validateProfile(array $profile): void
     {
-        if (array_diff(array_keys($profile), ['income_categories','expense_categories'])) {
+        if (array_diff(array_keys($profile), ['income_categories','expense_categories','sharing_already_in_expense','excluded_income_categories'])) {
             throw ValidationException::withMessages(['kpiProfileJson' => 'Profil KPI memiliki field yang tidak dikenal.']);
         }
         foreach (['income_categories','expense_categories'] as $key) {
@@ -24,6 +24,17 @@ class KpiBudgetPreviewService
                 if (!is_string($value) || trim($value) === '' || mb_strlen($value) > 80) {
                     throw ValidationException::withMessages(['kpiProfileJson' => 'Kategori tidak valid.']);
                 }
+            }
+        }
+        if (array_key_exists('sharing_already_in_expense', $profile) &&
+            !is_bool($profile['sharing_already_in_expense'])) {
+            throw ValidationException::withMessages(['kpiProfileJson' => 'Kebijakan biaya sharing harus boolean.']);
+        }
+        if (array_key_exists('excluded_income_categories', $profile)) {
+            $excluded = $profile['excluded_income_categories'];
+            if (!is_array($excluded) || !array_is_list($excluded) ||
+                count(array_diff($excluded, $profile['income_categories'])) > 0) {
+                throw ValidationException::withMessages(['kpiProfileJson' => 'Kategori pengecualian harus bagian dari pendapatan.']);
             }
         }
         if (array_intersect($profile['income_categories'], $profile['expense_categories'])) {
