@@ -84,6 +84,9 @@ class RkaPlatformWorkspace extends Page
     public string $journalMappingJson = '{}';
     public $journalFile = null;
     public $answerEvidenceFile = null;
+    public string $legacySource = 'investment';
+    public ?int $legacyUnitId = null;
+    public array $legacyPreview = [];
 
     public function mount(): void
     {
@@ -255,6 +258,14 @@ class RkaPlatformWorkspace extends Page
         Cycle::query()->where('organization_id', $this->orgId())->findOrFail($id);
         $this->cycleId = $id;
         $this->instanceId = $this->bookId = $this->sectionId = null;
+    }
+
+    public function previewLegacy(): void
+    {
+        abort_unless(auth()->user()->hasRole('superadmin'), 403);
+        $this->validate(['legacySource' => 'required|string', 'legacyUnitId' => 'required|integer']);
+        $this->legacyPreview = app(\App\Services\RkaPlatform\LegacyBudgetPreviewService::class)
+            ->preview((int)auth()->id(), $this->legacySource, $this->legacyUnitId);
     }
 
     public function createQuestion(): void
@@ -564,6 +575,7 @@ class RkaPlatformWorkspace extends Page
             'org' => null, 'isManager' => false, 'isFinance' => false,
             'isInstanceOwner' => false, 'canAnswer' => false, 'canReview' => false,
             'canEditBook' => false, 'canApproveBookSection' => false, 'evidence' => collect(),
+            'canPreviewLegacy' => false, 'legacyUnits' => collect(),
             'units' => collect(), 'users' => collect(), 'cycles' => collect(), 'questions' => collect(),
             'instances' => collect(), 'invitations' => collect(), 'answers' => collect(), 'syntheses' => collect(),
             'books' => collect(), 'bookSections' => collect(), 'templates' => collect(),
@@ -572,6 +584,10 @@ class RkaPlatformWorkspace extends Page
         if (!$this->organizationId) return $data;
         $orgId = $this->orgId();
         $data['org'] = Organization::findOrFail($orgId);
+        $data['canPreviewLegacy'] = auth()->user()->hasRole('superadmin');
+        if ($data['canPreviewLegacy']) {
+            $data['legacyUnits'] = \App\Models\Unit::query()->orderBy('nama')->get(['id','nama']);
+        }
         $data['isManager'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin']);
         $data['isFinance'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','finance']);
         $data['canEditBook'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','editor']);
