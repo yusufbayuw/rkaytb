@@ -619,6 +619,17 @@
                     <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Kebijakan Approval Closing / Reopening</summary>
                         <p class="text-xs text-gray-500 mt-2">Konfigurasikan 2–5 tingkat persetujuan berdasarkan role organisasi. Pembuat dan pengaktif kebijakan harus berbeda; tahap approval selalu menggunakan versi policy yang dibekukan saat pengajuan.</p>
+                        @if($cycleCurrent && $cycleCurrent->status === 'draft')
+                            <form wire:submit.prevent="updateCycleCloseRisk" class="flex flex-wrap gap-3 items-end mt-4">
+                                <div><label class="block text-xs mb-1">Risiko closing pada siklus aktif</label>
+                                    <select wire:model.defer="cycleCloseRisk" class="border rounded-lg p-2 dark:bg-gray-900">
+                                        <option value="normal">Normal</option><option value="high">Tinggi</option>
+                                    </select>
+                                </div>
+                                <button type="submit" class="px-4 py-2 border rounded-lg">Simpan Risiko Siklus</button>
+                                <p class="text-xs text-gray-500">Perubahan risiko membatalkan kecocokan hash rekonsiliasi lama, jadi wajib hitung ulang.</p>
+                            </form>
+                        @endif
                         <form wire:submit.prevent="proposeClosingPolicy" class="grid md:grid-cols-3 gap-3 mt-4">
                             <select wire:model.defer="policyAction" class="border rounded-lg p-2 dark:bg-gray-900">
                                 <option value="cycle.close">Closing</option><option value="cycle.reopen">Pembukaan kembali</option>
