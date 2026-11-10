@@ -19,6 +19,8 @@ class BookAutoContentService
                 ['Eliminasi beban internal', $con['eliminated_internal_expense'] ?? '0.00'],
                 ['Beban konsolidasi', $con['expense'] ?? '0.00'],
                 ['Surplus/(Defisit) konsolidasi', $con['surplus'] ?? '0.00'],
+                ['Pendapatan pengecualian (konfigurasi profil)', $con['excluded_external_income'] ?? '0.00'],
+                ['Surplus tanpa kategori pendapatan pengecualian', $con['surplus_without_excluded_income'] ?? ($con['surplus'] ?? '0.00')],
             ]];
         }
         if ($type === 'unit_kpi') {
@@ -29,10 +31,13 @@ class BookAutoContentService
                     $item['plan_income'] ?? '0.00', $item['plan_expense'] ?? '0.00',
                     $item['plan_sharing'] ?? '0.00', $item['plan_surplus'] ?? '0.00',
                     $item['actual_surplus'] ?? '0.00', $item['variance'] ?? '0.00',
+                    $item['plan_surplus_without_excluded_income'] ?? '0.00',
+                    $item['actual_surplus_without_excluded_income'] ?? '0.00',
                 ];
             }
             return ['headers' => ['Unit','Pendapatan Anggaran','Beban Anggaran',
-                'Sharing Rencana','Surplus Rencana','Surplus Aktual','Deviasi'], 'rows' => $rows];
+                'Sharing Rencana','Surplus Rencana','Surplus Aktual','Deviasi',
+                'Rencana Tanpa Kategori Pengecualian','Aktual Tanpa Kategori Pengecualian'], 'rows' => $rows];
         }
         if ($type === 'shared_cost') {
             $rows = [];
