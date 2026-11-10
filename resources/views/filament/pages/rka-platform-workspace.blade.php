@@ -307,7 +307,7 @@
                         <summary class="font-semibold cursor-pointer">KPI Budget — Pratinjau Sebelum Sharing Budget</summary>
                         <form wire:submit.prevent="saveKpiProfile" class="space-y-2 mt-3">
                             <label class="text-sm font-medium block">Kategori pendapatan dan biaya untuk siklus ini</label>
-                            <p class="text-xs text-gray-500">Daftar kategori ditentukan oleh organisasi. Contoh format: {"income_categories":["income"],"expense_categories":["expense"]}. Angka contoh bukan kebijakan bawaan sistem.</p>
+                            <p class="text-xs text-gray-500">Daftar kategori ditentukan oleh organisasi. Format: {"income_categories":["REV"],"expense_categories":["COST"],"sharing_already_in_expense":false,"excluded_income_categories":["SPECIAL"]}. Kode di atas hanya ilustrasi sintaks, bukan aturan organisasi. Penandaan sharing wajib sebelum closing.</p>
                             <textarea wire:model.defer="kpiProfileJson" rows="3" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
                             <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Simpan Profil KPI</button>
                         </form>
@@ -428,6 +428,9 @@
                                     @endforeach
                                 </select>
                             </div>
+                            <div><label class="block text-xs mb-1">Kategori pendapatan akuntansi (opsional, untuk KPI dengan/tanpa kategori khusus)</label>
+                                <input wire:model.defer="mappingCategory" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Kode kategori organisasi" />
+                            </div>
                             <div><label class="block text-xs mb-1">Unit default (opsional)</label>
                                 <select wire:model.defer="mappingUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="">Unit dari baris jurnal</option>
@@ -443,7 +446,7 @@
                                     @forelse($accountMappings as $mapping)
                                         <tr class="border-t dark:border-gray-700">
                                             <td class="p-2">{{ $mapping->source }} / {{ $mapping->account_code }}</td>
-                                            <td class="p-2">{{ $mapping->classification }}</td>
+                                            <td class="p-2">{{ $mapping->classification }} @if($mapping->category) ({{ $mapping->category }}) @endif</td>
                                             <td class="p-2">{{ $mapping->valid_from }} – {{ $mapping->valid_to }}</td>
                                             <td class="p-2">{{ $mapping->active ? 'Disahkan' : 'Draft' }}</td>
                                             <td class="p-2">
@@ -508,6 +511,55 @@
                             @empty
                                 <p class="text-sm text-gray-500">Belum ada rekonsiliasi. Konfigurasikan mapping akun dan verifikasi sumber terlebih dahulu.</p>
                             @endforelse
+                        </div>
+                    </details>
+                @endif
+
+                @if($isFinance)
+                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                        <summary class="font-semibold cursor-pointer">Kebijakan Materialitas dan Pengecualian Terkendali</summary>
+                        <p class="text-xs text-gray-500 mt-2">Pengecualian hanya boleh untuk kategori anggaran yang belum dipetakan, bukan untuk jurnal tidak seimbang, transaksi ganda, clearing terbuka, atau eliminasi internal yang bermasalah. Jumlah pengecualian dihitung bruto dan dibatasi oleh batas nominal serta persentase secara bersamaan.</p>
+                        @if($isManager)
+                            <form wire:submit.prevent="proposeMaterialityPolicy" class="grid md:grid-cols-3 gap-3 mt-4">
+                                <div><label class="block text-xs mb-1">Batas absolut (mata uang organisasi)</label>
+                                    <input wire:model.defer="materialityAmount" type="number" min="0.01" step="0.01" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                                <div><label class="block text-xs mb-1">Batas relatif (basis poin, 100 = 1%)</label>
+                                    <input wire:model.defer="materialityBasisPoints" type="number" min="1" max="10000" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                                <div class="flex items-end"><button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Kebijakan</button></div>
+                            </form>
+                        @endif
+                        <div class="mt-3 space-y-2">
+                            @foreach($materialityPolicies as $policy)
+                                <div class="border-b dark:border-gray-700 py-2 flex flex-wrap justify-between text-sm gap-2">
+                                    <span>v{{ $policy->version }} · batas {{ number_format($policy->absolute_minor / 100, 2) }} · {{ $policy->percentage_bps }} bps · {{ $policy->status }}</span>
+                                    @if($isManager && $policy->status === 'draft' && $policy->created_by !== auth()->id())
+                                        <button type="button" wire:click="activateMaterialityPolicy({{ $policy->id }})" class="border rounded px-2 py-1">Sahkan Batas</button>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                        @if($unmappedBudgetLines->count() && $cycleCurrent?->status === 'draft')
+                            <form wire:submit.prevent="requestMaterialityException" class="grid md:grid-cols-3 gap-3 mt-4">
+                                <div class="md:col-span-2"><label class="block text-xs mb-1">Baris anggaran yang belum masuk profil KPI</label>
+                                    <select wire:model.defer="exceptionBudgetId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                        <option value="">Pilih anggaran</option>
+                                        @foreach($unmappedBudgetLines as $line)
+                                            <option value="{{ $line->id }}">#{{ $line->id }} · {{ $line->category }} · {{ $line->name }} · {{ $line->amount }}</option>
+                                        @endforeach
+                                    </select></div>
+                                <textarea wire:model.defer="exceptionReason" rows="2" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Alasan dan bukti pertimbangan minimal 10 karakter"></textarea>
+                                <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Pengecualian</button>
+                            </form>
+                        @endif
+                        <div class="mt-3 space-y-2">
+                            @foreach($materialityExceptions as $exception)
+                                <div class="border-b dark:border-gray-700 py-2 flex flex-wrap gap-2 justify-between items-center text-sm">
+                                    <span>#{{ $exception->id }} · Anggaran #{{ $exception->budget_line_id }} · {{ $exception->amount_minor / 100 }} · {{ $exception->status }} · {{ $exception->reason }}</span>
+                                    @if($exception->status === 'requested' && $exception->requested_by !== auth()->id())
+                                        <button type="button" wire:click="approveMaterialityException({{ $exception->id }})" class="border rounded px-2 py-1">Sahkan Pengecualian</button>
+                                    @endif
+                                </div>
+                            @endforeach
                         </div>
                     </details>
                 @endif
