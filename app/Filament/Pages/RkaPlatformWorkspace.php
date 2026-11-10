@@ -35,6 +35,11 @@ class RkaPlatformWorkspace extends Page
     public ?int $sectionId = null;
 
     public string $orgName = '';
+    public string $orgBrand = '';
+    public string $orgCurrency = 'IDR';
+    public string $orgLocale = 'id';
+    public string $orgTimezone = 'Asia/Jakarta';
+    public string $orgColor = '#1e3a5f';
     public string $unitCode = '';
     public string $unitName = '';
     public string $memberEmail = '';
@@ -83,6 +88,7 @@ class RkaPlatformWorkspace extends Page
         if ($this->organizationId) {
             $this->cycleId = Cycle::query()->where('organization_id', $this->organizationId)
                 ->latest('id')->value('id');
+            $this->loadBranding();
         }
     }
 
@@ -144,6 +150,7 @@ class RkaPlatformWorkspace extends Page
             $this->organizationId = $org->id;
         });
         $this->orgName = '';
+        $this->loadBranding();
         $this->notify('success', 'Organisasi dibuat.');
     }
 
@@ -153,6 +160,38 @@ class RkaPlatformWorkspace extends Page
         $this->organizationId = $id;
         $this->cycleId = Cycle::query()->where('organization_id', $id)->latest('id')->value('id');
         $this->instanceId = $this->bookId = $this->sectionId = null;
+        $this->loadBranding();
+    }
+
+    private function loadBranding(): void
+    {
+        if (!$this->organizationId) return;
+        $org = Organization::findOrFail($this->orgId());
+        $this->orgBrand = $org->brand_name ?: $org->name;
+        $this->orgCurrency = $org->currency;
+        $this->orgLocale = $org->locale;
+        $this->orgTimezone = $org->timezone;
+        $this->orgColor = $org->primary_color;
+    }
+
+    public function updateBranding(): void
+    {
+        $this->managers();
+        $this->validate([
+            'orgBrand' => 'required|string|max:150',
+            'orgCurrency' => 'required|regex:/^[A-Z]{3}$/',
+            'orgLocale' => 'required|regex:/^[a-z]{2}(?:_[A-Z]{2})?$/',
+            'orgTimezone' => 'required|timezone',
+            'orgColor' => 'required|regex:/^#[0-9a-fA-F]{6}$/',
+        ]);
+        $org = Organization::findOrFail($this->orgId());
+        $org->update([
+            'brand_name' => $this->orgBrand, 'currency' => $this->orgCurrency,
+            'locale' => $this->orgLocale, 'timezone' => $this->orgTimezone,
+            'primary_color' => $this->orgColor,
+        ]);
+        $this->audit()->record($org->id, (int)auth()->id(), 'organization.branding_updated', 'organization', $org->id);
+        $this->notify('success', 'Pengaturan organisasi diperbarui.');
     }
 
     public function addMember(): void
@@ -223,8 +262,12 @@ class RkaPlatformWorkspace extends Page
             'questionDomain' => 'required|string|max:80',
             'questionOwnerRole' => 'required|string|max:80',
         ]);
-        $rules = json_decode($this->questionRulesJson, true, 512, JSON_THROW_ON_ERROR);
-        $evidence = json_decode($this->questionEvidenceJson, true, 512, JSON_THROW_ON_ERROR);
+        try {
+            $rules = json_decode($this->questionRulesJson, true, 512, JSON_THROW_ON_ERROR);
+            $evidence = json_decode($this->questionEvidenceJson, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw ValidationException::withMessages(['questionRulesJson' => 'Format JSON pertanyaan tidak valid.']);
+        }
         if (!is_array($rules) || !is_array($evidence)) {
             throw ValidationException::withMessages(['questionRulesJson' => 'Aturan harus berupa objek JSON.']);
         }
@@ -247,7 +290,11 @@ class RkaPlatformWorkspace extends Page
         $question = Question::query()->where('organization_id', $this->orgId())
             ->where('active', true)->findOrFail($this->newQuestionId);
         $this->access()->membership($this->orgId(), $this->newOwnerUserId);
-        $context = json_decode($this->questionContextJson, true, 512, JSON_THROW_ON_ERROR);
+        try {
+            $context = json_decode($this->questionContextJson, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw ValidationException::withMessages(['questionContextJson' => 'Format konteks JSON tidak valid.']);
+        }
         if (!is_array($context) || !app(QuestionRules::class)->applies($question->rules ?? [], $context)) {
             throw ValidationException::withMessages(['questionContextJson' => 'Kondisi pertanyaan tidak cocok.']);
         }
@@ -354,7 +401,11 @@ class RkaPlatformWorkspace extends Page
     public function importJournal(): void
     {
         $this->validate(['journalFile' => 'required|file|mimes:xlsx|max:10240', 'journalSource' => 'required|max:60']);
-        $mapping = json_decode($this->journalMappingJson, true, 512, JSON_THROW_ON_ERROR);
+        try {
+            $mapping = json_decode($this->journalMappingJson, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException $e) {
+            throw ValidationException::withMessages(['journalMappingJson' => 'Format mapping JSON tidak valid.']);
+        }
         if (!is_array($mapping)) throw ValidationException::withMessages(['journalMappingJson' => 'Mapping harus objek JSON.']);
         $batch = app(JournalSpreadsheetImporter::class)->import(
             $this->orgId(), (int)auth()->id(), $this->journalFile, $this->journalSource, $mapping
@@ -498,9 +549,15 @@ class RkaPlatformWorkspace extends Page
                     $this->instance()->owner_user_id === (int)auth()->id()) return;
                 $q->where('invited_user_id', auth()->id());
             })->get();
-            $data['answers'] = $instance->answers()->orderBy('author_id')->orderByDesc('revision')->get()
+            $privileged = $instance->owner_user_id === (int) auth()->id() ||
+                $this->access()->hasRole($orgId, (int) auth()->id(), ['owner','admin','editor','reviewer']);
+            $answerQuery = $instance->answers();
+            if (!$privileged) $answerQuery->where('author_id', auth()->id());
+            $data['answers'] = $answerQuery->orderBy('author_id')->orderByDesc('revision')->get()
                 ->unique('author_id')->values();
-            $data['syntheses'] = $instance->syntheses()->orderByDesc('version')->get();
+            $synthesisQuery = $instance->syntheses();
+            if (!$privileged) $synthesisQuery->where('status', 'verified');
+            $data['syntheses'] = $synthesisQuery->orderByDesc('version')->get();
         }
         if ($this->bookId) {
             $data['bookSections'] = $this->book()->sections()->get();

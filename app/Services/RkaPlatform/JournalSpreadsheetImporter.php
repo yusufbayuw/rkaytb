@@ -33,6 +33,9 @@ class JournalSpreadsheetImporter
         $workbook = $reader->load($file->getRealPath());
         try {
             $sheet = $workbook->getActiveSheet();
+            if (\PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestDataColumn()) > 100) {
+                throw ValidationException::withMessages(['journalFile' => 'Maksimum 100 kolom per impor.']);
+            }
             if ($sheet->getHighestRow() > 10001) {
                 throw ValidationException::withMessages(['journalFile' => 'Maksimum 10.000 baris per impor.']);
             }
@@ -125,6 +128,7 @@ class JournalSpreadsheetImporter
         if (!preg_match('/^\d{1,15}(?:\.\d{1,2})?$/', $raw)) {
             throw ValidationException::withMessages(['journalFile' => 'Debit/kredit bukan desimal valid pada baris '.$row]);
         }
-        return number_format((float)$raw, 2, '.', '');
+        [$whole, $fraction] = array_pad(explode('.', $raw, 2), 2, '');
+        return $whole.'.'.str_pad($fraction, 2, '0');
     }
 }

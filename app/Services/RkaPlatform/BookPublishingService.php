@@ -2,7 +2,7 @@
 
 namespace App\Services\RkaPlatform;
 
-use App\Models\RkaPlatform\{Book, BookSection, BudgetLine, SharedPool, Synthesis, NarrativeConflict, JournalLine};
+use App\Models\RkaPlatform\{Book, BookSection, BudgetLine, SharedPool, Synthesis, NarrativeConflict, JournalLine, Cycle};
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -53,7 +53,9 @@ class BookPublishingService
                 ->whereHas('instance', fn ($q) => $q->where('cycle_id', $book->cycle_id))->exists()) {
                 throw ValidationException::withMessages(['book' => 'Konflik narasi pada siklus belum diselesaikan.']);
             }
+            $cycle = Cycle::query()->where('organization_id', $book->organization_id)->findOrFail($book->cycle_id);
             if (JournalLine::query()->where('organization_id', $book->organization_id)
+                ->whereBetween('posted_on', [$cycle->starts_on, $cycle->ends_on])
                 ->where('entry_kind', 'unmapped')->where('posting_status', 'posted')->exists()) {
                 throw ValidationException::withMessages(['book' => 'Jurnal posted belum terpetakan.']);
             }

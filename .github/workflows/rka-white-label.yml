@@ -1,0 +1,41 @@
+name: RKA White Label Checks
+
+on:
+  pull_request:
+    paths:
+      - 'app/Models/RkaPlatform/**'
+      - 'app/Services/RkaPlatform/**'
+      - 'app/Filament/Pages/RkaPlatformWorkspace.php'
+      - 'app/Http/Controllers/RkaPlatformExportController.php'
+      - 'database/migrations/2026_11_10_*'
+      - 'tests/**'
+      - 'resources/views/filament/pages/rka-platform-workspace.blade.php'
+      - 'routes/rka_platform.php'
+      - 'routes/web.php'
+      - '.github/workflows/rka-white-label.yml'
+  push:
+    branches: [feature/white-label-rka-platform]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, dom, fileinfo, pdo_sqlite, sqlite3, zip, gd, intl
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env && php artisan key:generate --force
+      - name: PHP syntax lint
+        run: |
+          find app/Models/RkaPlatform app/Services/RkaPlatform app/Http/Controllers/RkaPlatformExportController.php app/Filament/Pages/RkaPlatformWorkspace.php database/migrations/2026_11_10_* -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Test white-label platform
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+        run: php artisan test --filter=RkaPlatform
+      - name: Check routes
+        run: php artisan route:list --path=rka-platform

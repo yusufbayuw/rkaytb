@@ -6,6 +6,7 @@ use App\Models\RkaPlatform\Book;
 use Dompdf\Dompdf;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use ZipArchive;
 use RuntimeException;
@@ -36,8 +37,12 @@ class BookExportService
                 $sheet->fromArray(['Unit ID','Akun','Kategori','Uraian','Anggaran'], null, 'A1');
                 $row = 2;
                 foreach ($snapshot['budgets'] as $item) {
-                    $sheet->fromArray([$item['unit_id'], $item['account_code'], $item['category'],
-                        $item['name'], (float)$item['amount']], null, 'A'.$row++);
+                    $sheet->setCellValue('A'.$row, $item['unit_id']);
+                    foreach (['B' => 'account_code','C' => 'category','D' => 'name'] as $col => $key) {
+                        $sheet->setCellValueExplicit($col.$row, (string)($item[$key] ?? ''), DataType::TYPE_STRING);
+                    }
+                    $sheet->setCellValue('E'.$row, (float)$item['amount']);
+                    $row++;
                 }
                 $sheet->getStyle('A1:E1')->getFont()->setBold(true);
                 $sheet->getColumnDimension('D')->setWidth(45);
@@ -45,8 +50,12 @@ class BookExportService
                 $share = $spreadsheet->createSheet(); $share->setTitle('Shared Cost');
                 $share->fromArray(['Cost Pool','Nominal','Metode','Alokasi (JSON)'], null, 'A1');
                 foreach ($snapshot['shared_pools'] as $i => $pool) {
-                    $share->fromArray([$pool['code'], (float)$pool['amount'], $pool['method'],
-                        json_encode($pool['allocations'], JSON_UNESCAPED_UNICODE)], null, 'A'.($i+2));
+                    $rowIndex = $i+2;
+                    $share->setCellValueExplicit('A'.$rowIndex, (string)$pool['code'], DataType::TYPE_STRING);
+                    $share->setCellValue('B'.$rowIndex, (float)$pool['amount']);
+                    $share->setCellValueExplicit('C'.$rowIndex, (string)$pool['method'], DataType::TYPE_STRING);
+                    $share->setCellValueExplicit('D'.$rowIndex,
+                        json_encode($pool['allocations'], JSON_UNESCAPED_UNICODE), DataType::TYPE_STRING);
                 }
                 (new Xlsx($spreadsheet))->save('php://output');
                 $spreadsheet->disconnectWorksheets();
