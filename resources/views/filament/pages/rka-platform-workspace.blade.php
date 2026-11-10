@@ -580,6 +580,25 @@
                     </details>
                 @endif
 
+                @if($requiresUnitConsent && $unitConsentPools->count())
+                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                        <summary class="font-semibold cursor-pointer">Persetujuan Sharing Budget untuk Unit Saya</summary>
+                        <p class="text-xs text-gray-500 mt-2">Penanggung jawab unit menyetujui hanya biaya yang dibebankan ke unitnya. Persetujuan berlaku untuk satu versi hasil alokasi; perubahan bobot, nominal atau penerima mengharuskan persetujuan ulang. Jika tidak sesuai, ajukan sengketa.</p>
+                        <div class="mt-3 space-y-2">
+                            @foreach($unitConsentPools as $pool)
+                                <div class="border-b dark:border-gray-700 py-2 flex flex-wrap gap-2 items-center justify-between text-sm">
+                                    <span>{{ $pool->name }} · Versi {{ $pool->version }} · Dibebankan {{ ($pool->allocations ?? [])[(string)$this->access()->membership($org->id, (int)auth()->id())->unit_id] ?? '-' }} · {{ $pool->status }}</span>
+                                    @if(in_array($pool->id, $signedPoolIds))
+                                        <span class="font-medium text-green-700">Disetujui unit</span>
+                                    @elseif($pool->status === 'draft' && $cycleCurrent?->status === 'draft' && $pool->created_by !== auth()->id())
+                                        <button type="button" wire:click="consentSharedPool({{ $pool->id }})" class="border rounded px-3 py-1">Setujui untuk Unit Saya</button>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    </details>
+                @endif
+
                 @if($canRaiseDispute)
                     <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Sengketa Alokasi Sharing Budget</summary>
