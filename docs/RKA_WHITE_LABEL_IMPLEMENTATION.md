@@ -13,18 +13,18 @@
 |---|---|---|
 | Organisasi | Identitas, warna, mata uang, locale, zona waktu, unit, keanggotaan, role standar dan role approval khusus organisasi | Logo dan identitas dokumen lanjutan belum lengkap |
 | Budget | Draft budget → pemeriksa independen; penambahan/persetujuan ditolak setelah periode closed | Revisi dan pembandingan versi budget belum berupa modul lengkap |
-| Sharing Budget | Cost pool equal/weighted, pembulatan minor unit, validasi penerima, persetujuan independen, sengketa dan resolusi | Driver lain seperti headcount, area, lisensi, usage belum diimplementasikan |
+| Sharing Budget | Cost pool equal/weighted, perhitungan ulang terkunci, persetujuan independen, serta tanda tangan digital-logis seluruh unit penerima sesuai versi/hash pada siklus baru; sengketa pihak tak terdampak ditolak | Siklus existing mempertahankan approval historis, driver selain equal/weighted dan revisi alokasi approved masih perlu workflow |
 | Jurnal XLSX | Mapping header, staging, idempotensi hash file dan source line ID, pemeriksaan format dan peringatan balance | Tidak mem-post jurnal asli; konektor API belum ada |
 | COA Mapping | Aturan per sumber, akun, tanggal efektif, unit default, klasifikasi P&L/internal/clearing dan kategori pendapatan, maker-checker | Multi-entity dan jurnal koreksi/reversal kompleks belum seluruhnya dicakup |
 | Rekonsiliasi | Sumber verified, saldo jurnal, klasifikasi akun, clearing, internal transfer dipasangkan berdasar source/reference; blocker, snapshot dan SHA | Kesalahan struktural tidak dapat diberi pengecualian |
 | KPI Budget | Per unit dan konsolidasi, budget vs actual, surplus dan deviasi, dengan/tanpa kategori pendapatan khusus sesuai profil organisasi, kebijakan sharing yang sudah/ belum termasuk biaya | Forecast, multi-year comparison dan skenario multi-entity belum lengkap |
-| Materialitas | Batas **nominal dan persentase secara bersamaan**; policy dan pengecualian maker-checker; total pengecualian tidak bisa melampaui limit | Hanya kategori budget approved yang belum termapping, bukan exception jurnal |
+| Materialitas | Batas **nominal dan persentase secara bersamaan**; policy dan pengecualian maker-checker; total pengecualian tidak bisa melampaui limit; jumlah/nominal yang dikecualikan ditampilkan dalam rekonsiliasi dan Buku RKA | Hanya kategori budget approved yang belum termapping, bukan exception jurnal |
 | Approval | 2–5 tingkat, berdasarkan role organisasi dan risiko, snapshot policy, pemohon dan approver di setiap tingkat berbeda | SLA eskalasi, delegasi sementara, persetujuan unit terdampak yang lebih kompleks belum lengkap |
 | Closing | Rekonsiliasi verified versi terbaru dengan nol blocker, multi-step approval, snapshot immutable, hash sumber, reopen berjenjang | Pembukuan koreksi tetap dilakukan pada sistem sumber |
 | Narasi | Bank pertanyaan, penugasan reviewer per pertanyaan, undangan, kontribusi versi, sintesis, konflik, evidence privat/verified | Kontrol kualitas semantik dan virus scan belum lengkap |
 | Buku RKA | Template judul sendiri, blok NARASI/KONSOLIDASI/KPI/SHARING/REKONSILIASI, editor/reviewer, snapshot angka hanya dari closing sah | Drag-and-drop, daftar isi otomatis, styling profesional kompleks belum lengkap |
 | Ekspor | DOCX/PDF/XLSX dari snapshot identik, tabel konsolidasi, KPI per unit, Sharing Budget, rekonsiliasi dan grafik | QA visual dokumen panjang masih diperlukan |
-| RKA existing | **Preview baca-saja oleh superadmin**, tanpa mengubah/menyalin nilai historis | Mapping legacy-ID, periode, parent-child dan nominal teks harus divalidasi sebelum integrasi |
+| RKA existing | **Preview baca-saja oleh superadmin**; tabel RKA Investasi tidak lagi menulis data saat memformat sel; akses panel hanya untuk pemilik peran, unit, atau keanggotaan RKA aktif | Pemetaan legacy-ID/periode/parent-child dan pemeriksaan write-time calculated totals pada fitur lama masih perlu UAT |
 
 ## Aturan perhitungan dan kontrol data
 
@@ -36,12 +36,12 @@
 6. Kategori pendapatan/biaya, inclusion of Sharing Budget, dan jenis pendapatan khusus diatur **per profil organisasi**, tanpa kode sekolah atau Dana Pembangunan yang di-hardcode.
 7. Materialitas tidak menghapus/mengabaikan jurnal, clearing, duplicate, atau eliminasi yang bermasalah. Pengecualian administratif yang diizinkan hanya unmapped budget category yang disahkan oleh pihak berbeda, ditelusuri per budget line, dan diperiksa limit absolut sekaligus basis poin kumulatif.
 8. Selisih antara realisasi dan anggaran adalah deviasi manajerial, bukan otomatis error rekonsiliasi. Kecacatan sumber berbeda dari varians anggaran.
-9. Closing mensyaratkan snapshot rekonsiliasi **terbaru**, disahkan independen, masih cocok dengan source hash, dan tanpa blocker. Persetujuan closing berjenjang disimpan sebagai jejak audit. Reopen tidak menimpa snapshot lama.
+9. Closing mensyaratkan snapshot rekonsiliasi **terbaru**, disahkan independen, masih cocok dengan source hash, dan tanpa blocker termasuk status persetujuan tiap unit Sharing Budget sesuai kebijakan siklus. Persetujuan closing berjenjang disimpan sebagai jejak audit. Reopen tidak menimpa snapshot lama.
 10. Penerbitan Buku RKA resmi mensyaratkan closed cycle dan hash laporan/sumber yang masih cocok; semua teks/review harus lengkap. Ekspor menggunakan snapshot yang sudah diterbitkan, tidak menghitung ulang data hidup.
 
 ## Operasional melalui Filament
 
-Buat organisasi dan siklus sendiri, lalu tetapkan unit, membership dan role/jabatan khusus. Role kustom dipakai sebagai approver tanpa mewarisi izin admin/finance. Masukkan anggaran dan cost pool, serta periksa hasil alokasinya. Impor jurnal sumber XLSX ke staging, minta reviewer berbeda memverifikasi batch, lalu atur mapping COA sesuai sumber akuntansi.
+Buat organisasi dan siklus sendiri, lalu tetapkan unit, membership dan role/jabatan khusus. **Siklus baru yang dibuat melalui Workspace RKA memakai kebijakan persetujuan Sharing Budget per unit terdampak secara default**, sedangkan siklus existing tidak dipaksa berubah. Penanggung jawab unit (`unit_manager`) harus ditugaskan pada unitnya dan menyetujui alokasi sebelum disahkan keuangan. Persetujuan menjadi usang bila hasil alokasi dihitung ulang. Role kustom dipakai sebagai approver tanpa mewarisi izin admin/finance. Masukkan anggaran dan cost pool, serta periksa hasil alokasinya. Impor jurnal sumber XLSX ke staging, minta reviewer berbeda memverifikasi batch, lalu atur mapping COA sesuai sumber akuntansi.
 
 Gunakan menu **Rekonsiliasi, Eliminasi Internal dan KPI Budget** untuk menyimpan run baru dan membaca blocker. Atur kebijakan materialitas dan pengecualian hanya untuk kategori anggaran belum terpetakan. Seluruh sengketa unit harus diselesaikan dan diaudit. Rekonsiliasi bersih disahkan oleh reviewer berbeda; closing diajukan dengan alasan, disetujui dalam 2–5 tahapan role, dan menyimpan snapshot terpisah.
 
@@ -63,9 +63,11 @@ Untuk Buku RKA, pengguna membuat daftar judul bagian bebas. Awalan **NARASI|, KO
 
 - Konversi RKA existing dengan mapping unit/akun/tahun/parent-child dan koreksi nilai string yang diverifikasi, tanpa merusak histori.
 - Multi badan hukum, eliminasi antar-legal entity, koreksi jurnal lintas periode, transaksi pajak dan rekonsiliasi source ERP/API yang terautentikasi.
-- Pendorong biaya bersama tambahan, forecast, KPI multi-year, revisi anggaran berjejak lengkap serta persetujuan eksplisit seluruh unit terdampak.
+- Pendorong biaya bersama tambahan, forecast, KPI multi-year, dan revisi anggaran/Sharing Budget approved dengan persetujuan ulang seluruh unit terdampak; penanganan sengketa lanjut yang mengharuskan versi baru.
 - SLA eskalasi/delegasi, role hierarchy dinamis, kontrol risiko yang lebih luas, evidence antivirus, penetrasi keamanan.
 - Buku RKA dengan cover profesional, logo, layout style, tabel dan grafik builder, daftar isi otomatis dan pengujian di Word/Excel pembaca asli.
-- Audit legacy terpisah untuk callback tampilan tabel yang menyimpan data dan metode akses panel Filament, dengan regresi pada seluruh fitur existing.
+- Callback RKA Investasi yang sebelumnya memanggil `save()` ketika rendering telah diubah menjadi baca-saja; panel Filament tidak lagi menerima user tanpa peran/unit/keanggotaan aktif. Tetap diperlukan pengujian browser/hak akses historis dan audit pada Resource lama lainnya, termasuk konsistensi penyimpanan nilai total saat edit sebenarnya.
+
+**Batas finansial:** mesin angka saat ini memakai dua desimal untuk semua mata uang. Organisasi yang memakai presisi selain dua desimal (contohnya JPY atau KWD) memerlukan perluasan skema dan kalkulator sebelum digunakan untuk laporan resmi.
 
 **Release policy: PR tetap Draft, tanpa merge ke main atau deploy.** Publikasi resmi dimatikan secara default sampai business UAT dan quality gate disetujui.
