@@ -114,6 +114,11 @@ class SharedPoolUnitConsentService
             (int)$pool->cycle_id !== (int)$cycle->id) {
             throw new AuthorizationException('Alokasi dan siklus tidak dalam organisasi yang sama.');
         }
+        if (DB::table('rka_sharing_disputes')->where('organization_id', $cycle->organization_id)
+            ->where('cycle_id', $cycle->id)->where('pool_id', $pool->id)
+            ->where('status', 'open')->exists()) {
+            throw ValidationException::withMessages(['pool' => 'Masih ada sengketa Sharing Budget terbuka.']);
+        }
         if (!$this->isRequired($cycle)) {
             // Backwards compatibility: older approved pools did not retain drivers.
             // Still reject foreign recipients and incorrect allocation totals.
@@ -143,11 +148,6 @@ class SharedPoolUnitConsentService
             throw ValidationException::withMessages([
                 'pool' => 'Persetujuan unit terdampak belum lengkap (unit ID: '.implode(', ', $missing).').',
             ]);
-        }
-        if (DB::table('rka_sharing_disputes')->where('organization_id', $cycle->organization_id)
-            ->where('cycle_id', $cycle->id)->where('pool_id', $pool->id)
-            ->where('status', 'open')->exists()) {
-            throw ValidationException::withMessages(['pool' => 'Masih ada sengketa Sharing Budget terbuka.']);
         }
     }
 }
