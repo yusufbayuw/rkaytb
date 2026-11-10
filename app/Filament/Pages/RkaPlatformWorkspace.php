@@ -11,7 +11,8 @@ use App\Models\RkaPlatform\{
 use App\Services\RkaPlatform\{
     TenantAccess, AuditTrail, ContributionService, QuestionRules,
     SharedCostAllocator, JournalSpreadsheetImporter, BookPublishingService, FinancialApprovalService,
-    EvidenceService, FinancialReconciliationService, FinancialClosingService, MaterialityExceptionService
+    EvidenceService, FinancialReconciliationService, FinancialClosingService,
+    MaterialityExceptionService, OrganizationRoleCatalog
 };
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
@@ -46,6 +47,8 @@ class RkaPlatformWorkspace extends Page
     public string $unitName = '';
     public string $memberEmail = '';
     public string $memberRole = 'contributor';
+    public string $newWorkflowRoleCode = '';
+    public string $newWorkflowRoleLabel = '';
     public string $cycleName = '';
     public string $cycleYear = '';
     public string $cycleStart = '';
@@ -242,9 +245,10 @@ class RkaPlatformWorkspace extends Page
         $this->managers();
         $this->validate([
             'memberEmail' => 'required|email|max:255',
-            'memberRole' => 'required|in:admin,finance,reviewer,editor,publisher,contributor,unit_manager',
+            'memberRole' => 'required|string|max:50',
             'memberUnitId' => 'nullable|integer',
         ]);
+        app(OrganizationRoleCatalog::class)->validateAssignable($this->orgId(), $this->memberRole);
         $user = User::query()->where('email', $this->memberEmail)->first();
         if (!$user) throw ValidationException::withMessages(['memberEmail' => 'Pengguna harus memiliki akun existing.']);
         $existing = Membership::query()->where('organization_id', $this->orgId())
@@ -266,6 +270,16 @@ class RkaPlatformWorkspace extends Page
         $this->memberEmail = '';
         $this->memberUnitId = null;
         $this->notify('success', 'Anggota ditambahkan.');
+    }
+
+    public function addWorkflowRole(): void
+    {
+        $this->validate(['newWorkflowRoleCode' => 'required|regex:/^[a-z][a-z0-9_-]{1,49}$/',
+            'newWorkflowRoleLabel' => 'required|string|min:3|max:100']);
+        app(OrganizationRoleCatalog::class)->add($this->orgId(), (int)auth()->id(),
+            $this->newWorkflowRoleCode, $this->newWorkflowRoleLabel);
+        $this->newWorkflowRoleCode = $this->newWorkflowRoleLabel = '';
+        $this->notify('success', 'Role kerja organisasi tersedia untuk penugasan dan matriks approval.');
     }
 
     public function createUnit(): void
@@ -820,6 +834,7 @@ class RkaPlatformWorkspace extends Page
             'isInstanceOwner' => false, 'canAnswer' => false, 'canReview' => false,
             'canEditBook' => false, 'canApproveBookSection' => false, 'evidence' => collect(),
             'canPreviewLegacy' => false, 'legacyUnits' => collect(),
+            'assignableRoles' => [],
             'kpiPreview' => null,
             'accountMappings' => collect(), 'reconRuns' => collect(),
             'closingPolicies' => collect(), 'cycleApprovals' => collect(),
@@ -835,6 +850,7 @@ class RkaPlatformWorkspace extends Page
         if (!$this->organizationId) return $data;
         $orgId = $this->orgId();
         $data['org'] = Organization::findOrFail($orgId);
+        $data['assignableRoles'] = array_diff_key(app(OrganizationRoleCatalog::class)->roles($orgId), ['owner' => true]);
         $data['canPreviewLegacy'] = auth()->user()->hasRole('superadmin');
         if ($data['canPreviewLegacy']) {
             $data['legacyUnits'] = \App\Models\Unit::query()->orderBy('nama')->get(['id','nama']);
