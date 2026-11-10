@@ -195,6 +195,19 @@ class RkaPlatformWorkspace extends Page
             'orgColor' => 'required|regex:/^#[0-9a-fA-F]{6}$/',
         ]);
         $org = Organization::findOrFail($this->orgId());
+        if ($org->currency !== $this->orgCurrency) {
+            $approvedBudgetExists = BudgetLine::query()->where('organization_id', $org->id)
+                ->where('status', 'approved')->exists();
+            $approvedPoolExists = SharedPool::query()->where('organization_id', $org->id)
+                ->where('status', 'approved')->exists();
+            $publishedBookExists = Book::query()->where('organization_id', $org->id)
+                ->where('status', 'published')->exists();
+            if ($approvedBudgetExists || $approvedPoolExists || $publishedBookExists) {
+                throw ValidationException::withMessages([
+                    'orgCurrency' => 'Mata uang tidak boleh diganti setelah ada anggaran/alokasi yang disahkan atau buku diterbitkan.',
+                ]);
+            }
+        }
         $org->update([
             'brand_name' => $this->orgBrand, 'currency' => $this->orgCurrency,
             'locale' => $this->orgLocale, 'timezone' => $this->orgTimezone,
