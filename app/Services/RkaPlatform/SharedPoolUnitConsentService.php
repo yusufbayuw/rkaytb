@@ -114,8 +114,23 @@ class SharedPoolUnitConsentService
             (int)$pool->cycle_id !== (int)$cycle->id) {
             throw new AuthorizationException('Alokasi dan siklus tidak dalam organisasi yang sama.');
         }
+        if (!$this->isRequired($cycle)) {
+            // Backwards compatibility: older approved pools did not retain drivers.
+            // Still reject foreign recipients and incorrect allocation totals.
+            $sum = 0;
+            foreach ($pool->allocations ?? [] as $unitId => $amount) {
+                if (!ctype_digit((string)$unitId) ||
+                    !Unit::where('organization_id', $cycle->organization_id)->whereKey((int)$unitId)->exists()) {
+                    throw ValidationException::withMessages(['pool' => 'Penerima biaya pada data lama tidak valid.']);
+                }
+                $sum += $this->allocator->toMinor((string)$amount);
+            }
+            if ($sum !== $this->allocator->toMinor((string)$pool->amount)) {
+                throw ValidationException::withMessages(['pool' => 'Jumlah alokasi tidak sama dengan biaya pool.']);
+            }
+            return;
+        }
         $ids = $this->affectedUnitIds($pool);
-        if (!$this->isRequired($cycle)) return;
 
         $signed = DB::table('rka_shared_pool_unit_consents')
             ->where('organization_id', $pool->organization_id)
