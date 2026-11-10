@@ -107,7 +107,7 @@ return [
         'path' => app_path('Filament/Pages'),
         'register' => [
             Pages\Dashboard::class,
-            \RyanChandler\FilamentProfile\Pages\Profile::class
+            // Profile page uses a maintained first-party application page, auto-discovered under App\\Filament\\Pages.
         ],
     ],
 
