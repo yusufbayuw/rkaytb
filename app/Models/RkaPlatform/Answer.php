@@ -11,5 +11,5 @@ class Answer extends Model
     protected $casts = [
         'evidence' => 'array',
     ];
-
+    public function instance() { return $this->belongsTo(QuestionInstance::class, 'instance_id'); }
 }
