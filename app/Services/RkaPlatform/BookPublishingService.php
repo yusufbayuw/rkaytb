@@ -107,6 +107,9 @@ class BookPublishingService
                 'template_id' => $book->template_id,
                 'title' => $book->title,
                 'currency' => $book->organization->currency,
+                'brand_color' => $book->organization->primary_color,
+                'units' => \App\Models\RkaPlatform\Unit::where('organization_id', $book->organization_id)
+                    ->orderBy('id')->get(['id','code','name'])->toArray(),
                 'sections' => $sections->map(fn ($s) => ['code' => $s->code, 'title' => $s->title,
                     'content' => $s->content, 'required' => $s->required,
                     'block_type' => $s->block_type ?? 'narrative'])->all(),
