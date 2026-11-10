@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Filament\Pages\RkaPlatformWorkspace;
+use Livewire\Livewire;
 use App\Models\RkaPlatform\{Organization, Membership, Unit, Cycle, SharedPool};
 use App\Services\RkaPlatform\{
     FinancialApprovalService, FinancialClosingService, FinancialReconciliationService,
@@ -145,4 +147,21 @@ class RkaPlatformSharedUnitConsentTest extends TestCase
             ->calculate($f['cycle'])['report']['blockers'], 'code');
         $this->assertContains('POOL_ALLOCATION_OR_UNIT_CONSENT_INVALID', $codes);
     }
+    public function test_unit_manager_can_sign_their_own_pool_through_filament_workflow(): void
+    {
+        $f = $this->fixture();
+        Livewire::actingAs($f['headA'])->test(RkaPlatformWorkspace::class)
+            ->assertSee('Persetujuan Sharing Budget untuk Unit Saya')
+            ->assertSee('Unit Alpha')
+            ->call('consentSharedPool', $f['pool']->id)
+            ->assertSee('Disetujui unit');
+
+        $this->assertSame(1, DB::table('rka_shared_pool_unit_consents')
+            ->where('pool_id', $f['pool']->id)
+            ->where('unit_id', $f['a']->id)->count());
+
+        Livewire::actingAs($f['headB'])->test(RkaPlatformWorkspace::class)
+            ->assertSee('Persetujuan Sharing Budget untuk Unit Saya');
+    }
+
 }
