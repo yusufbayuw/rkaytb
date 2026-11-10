@@ -30,7 +30,10 @@ jobs:
         run: |
           find app/Models/RkaPlatform app/Services/RkaPlatform tests/Unit/RkaPlatform* tests/Feature/RkaPlatform* app/Http/Controllers/RkaPlatformExportController.php app/Filament/Pages/RkaPlatformWorkspace.php database/migrations/2026_11_10_* -type f -name '*.php' -print0 | xargs -0 -n1 php -l
       - run: composer install --no-interaction --prefer-dist --no-progress
-      - run: cp .env.example .env && php artisan key:generate --force
+      - name: Prepare app environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
       - name: Test white-label platform
         env:
           APP_ENV: testing
