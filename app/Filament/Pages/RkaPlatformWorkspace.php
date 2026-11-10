@@ -679,9 +679,19 @@ class RkaPlatformWorkspace extends Page
         $titles = array_values(array_filter(array_map('trim', preg_split('/\R/u', $this->templateSections))));
         if (!$titles || count($titles) > 100) throw ValidationException::withMessages(['templateSections' => '1–100 judul bagian diperlukan.']);
         $sections = [];
-        foreach ($titles as $i => $title) $sections[] = [
-            'code' => 's'.($i+1), 'title' => $title, 'required' => true,
-        ];
+        $blockTypes = ['NARASI' => 'narrative', 'KONSOLIDASI' => 'consolidated',
+            'KPI' => 'unit_kpi', 'SHARING' => 'shared_cost', 'REKONSILIASI' => 'reconciliation'];
+        foreach ($titles as $i => $line) {
+            $parts = array_map('trim', explode('|', $line, 2));
+            $blockType = count($parts) === 2 ? ($blockTypes[strtoupper($parts[0])] ?? null) : 'narrative';
+            if ($blockType === null || trim(count($parts) === 2 ? $parts[1] : $parts[0]) === '') {
+                throw ValidationException::withMessages(['templateSections' => 'Jenis blok atau judul bagian tidak valid.']);
+            }
+            $sections[] = [
+                'code' => 's'.($i+1), 'title' => count($parts) === 2 ? $parts[1] : $parts[0],
+                'block_type' => $blockType, 'required' => true,
+            ];
+        }
         $template = BookTemplate::create([
             'organization_id' => $this->orgId(), 'name' => $this->templateName, 'sections' => $sections,
         ]);
@@ -706,6 +716,8 @@ class RkaPlatformWorkspace extends Page
                 BookSection::create([
                     'book_id' => $book->id, 'code' => $section['code'],
                     'title' => $section['title'], 'position' => $i,
+                    'block_type' => $section['block_type'] ?? 'narrative',
+                    'status' => ($section['block_type'] ?? 'narrative') === 'narrative' ? 'draft' : 'review',
                     'required' => (bool)($section['required'] ?? false),
                 ]);
             }
