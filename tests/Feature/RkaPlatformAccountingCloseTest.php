@@ -246,7 +246,7 @@ class RkaPlatformAccountingCloseTest extends TestCase
         $this->assertSame('consolidated', $snapshot['sections'][1]['block_type']);
         $this->assertSame('unit_kpi', $snapshot['sections'][2]['block_type']);
         $this->assertNotEmpty($snapshot['closing']['source_hash']);
-        $this->assertSame($f['org']->currency, $snapshot['currency']);
+        $this->assertSame($f['org']->fresh()->currency, $snapshot['currency']);
         $this->assertNotEmpty($snapshot['sha256']);
     }
 
