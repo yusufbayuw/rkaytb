@@ -229,6 +229,10 @@ class FinancialClosingService
         $pool = SharedPool::where('organization_id', $cycle->organization_id)
             ->where('cycle_id', $cycle->id)->findOrFail($poolId);
         $unit = Unit::where('organization_id', $cycle->organization_id)->findOrFail($unitId);
+        if (!array_key_exists((string)$unitId, $pool->allocations ?? []) ||
+            (float)($pool->allocations[$unitId] ?? 0) <= 0) {
+            $this->fail('Sengketa hanya berlaku untuk unit yang menerima pembebanan pada pool tersebut.');
+        }
         if (!$this->access->hasRole($cycle->organization_id, $actor, ['owner','admin','finance']) &&
             ((int)$membership->unit_id !== $unitId ||
                 !count(array_intersect($membership->roles ?? [], ['unit_manager','contributor'])))) {
