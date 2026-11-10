@@ -9,6 +9,7 @@ use Illuminate\Validation\ValidationException;
 
 class AccountProfile extends Page
 {
+    protected static ?string $slug = 'profile'; // Preserve the former profile URL for existing bookmarks.
     protected static ?string $navigationIcon = 'heroicon-o-user-circle';
     protected static ?string $navigationLabel = 'Profil Saya';
     protected static ?string $title = 'Profil Saya';
