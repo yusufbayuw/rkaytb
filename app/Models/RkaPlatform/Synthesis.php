@@ -12,5 +12,5 @@ class Synthesis extends Model
         'source_answer_ids' => 'array',
         'verified_at' => 'datetime',
     ];
-
+    public function instance() { return $this->belongsTo(QuestionInstance::class, 'instance_id'); }
 }
