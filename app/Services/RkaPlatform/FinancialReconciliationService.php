@@ -139,6 +139,8 @@ class FinancialReconciliationService
             ->where('cycle_id', $cycle->id)->orderBy('id')->get();
         $budgets = BudgetLine::where('organization_id', $org)->where('cycle_id', $cycle->id)->orderBy('id')->get();
         $pools = SharedPool::where('organization_id', $org)->where('cycle_id', $cycle->id)->orderBy('id')->get();
+        $unitConsents = DB::table('rka_shared_pool_unit_consents')->where('organization_id', $org)
+            ->where('cycle_id', $cycle->id)->orderBy('id')->get();
         $disputes = DB::table('rka_sharing_disputes')->where('organization_id', $org)
             ->where('cycle_id', $cycle->id)->orderBy('id')->get();
         $materialityPolicies = DB::table('rka_materiality_policies')->where('organization_id', $org)
@@ -152,7 +154,8 @@ class FinancialReconciliationService
             'cycle' => $cycle->only(['id','organization_id','starts_on','ends_on','settings']),
             'journal' => $journal->toArray(), 'batches' => $batches->toArray(),
             'mappings' => $maps->toArray(), 'budgets' => $budgets->toArray(),
-            'pools' => $pools->toArray(), 'disputes' => $disputes->toArray(),
+            'pools' => $pools->toArray(), 'unit_consents' => $unitConsents->toArray(),
+            'disputes' => $disputes->toArray(),
             'materiality_policies' => $materialityPolicies->toArray(), 'exceptions' => $exceptions->toArray(),
             'units' => $units->toArray(),
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
@@ -317,6 +320,11 @@ class FinancialReconciliationService
                 $perUnit[(int)$unitId]['plan_sharing'] += $allocated;
             }
             if ($sum !== $money($pool->amount)) $block('POOL_SUM_MISMATCH', (string)$pool->id);
+            try {
+                app(SharedPoolUnitConsentService::class)->requireAll($pool, $cycle);
+            } catch (ValidationException $e) {
+                $block('POOL_ALLOCATION_OR_UNIT_CONSENT_INVALID', (string)$pool->id);
+            }
         }
         foreach ($disputes as $dispute) {
             if ($dispute->status === 'open') $block('OPEN_SHARING_DISPUTE', (string)$dispute->id);
