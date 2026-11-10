@@ -17,6 +17,7 @@ return new class extends Migration {
             $t->string('source', 60);
             $t->string('account_code', 255);
             $t->string('classification', 40); // income, expense, internal_income, internal_expense, clearing, non_pnl
+            $t->string('category', 80)->nullable(); // optional organization-specific income category for exclusions
             $t->foreignId('unit_id')->nullable()->constrained('rka_units')->nullOnDelete();
             $t->date('valid_from');
             $t->date('valid_to');
