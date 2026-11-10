@@ -250,4 +250,37 @@ class RkaPlatformAccountingCloseTest extends TestCase
         $this->assertNotEmpty($snapshot['sha256']);
     }
 
+    public function test_high_risk_policy_requires_fresh_reconciliation_after_risk_change(): void
+    {
+        $f = $this->fixture();
+        $reconciliation = app(FinancialReconciliationService::class);
+        $firstRun = $reconciliation->prepare($f['cycle'], $f['author']->id);
+        $reconciliation->verify($f['cycle'], $firstRun, $f['checker']->id);
+
+        $f['cycle']->update(['settings' => array_merge($f['cycle']->settings ?? [], [
+            'close_risk' => 'high',
+        ])]);
+        $closing = app(FinancialClosingService::class);
+        $steps = [['label' => 'Finance', 'roles' => ['finance']],
+            ['label' => 'Owner', 'roles' => ['owner']]];
+        $policy = $closing->proposePolicy($f['org']->id, $f['owner']->id,
+            'cycle.close', $steps, 'high');
+        $closing->activatePolicy($policy, $f['admin']->id);
+        try {
+            $closing->request($f['cycle'], $f['submitter']->id, 'cycle.close',
+                'Period closing after the budget risk profile has changed.');
+            $this->fail('A stale reconciliation must not be accepted after a risk change.');
+        } catch (ValidationException $expected) {
+            $this->assertNotEmpty($expected->errors());
+        }
+
+        $latest = $reconciliation->prepare($f['cycle']->fresh(), $f['author']->id);
+        $reconciliation->verify($f['cycle']->fresh(), $latest, $f['checker']->id);
+        $request = $closing->request($f['cycle']->fresh(), $f['submitter']->id,
+            'cycle.close', 'Period closing after a freshly verified high-risk reconciliation');
+        $this->assertSame('high', $request->risk);
+        $this->assertSame('pending', $request->status);
+        $this->assertSame($policy->id, $request->steps_snapshot['policy_id']);
+    }
+
 }
