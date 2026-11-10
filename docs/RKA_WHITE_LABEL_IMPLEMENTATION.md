@@ -1,55 +1,63 @@
-# RKA White-Label Platform — Implementation Inventory
+# RKA White-Label Platform — Implementation, Safety Gates and Rollout
 
-## Non-negotiable product contract
+## Product contract
 
-- The two supplied documents are **format and regression references only**. They are never used to seed the organization, units, hierarchy, staff roles, chart of accounts, pricing, allocation methods, program templates, or content.
-- New tables live under the rka_ namespace. Legacy models, tables, and resource routes remain in place. There is no automatic backfill or deletion.
-- An organization is explicitly created by a pre-existing superadmin or admin-keuangan, and the creator receives an organization-specific owner membership. Other users must be added using existing accounts. Users do not inherit organization membership solely from a global Spatie role.
-- Members can access only organizations in which their memberships are active. Question access is restricted further by question ownership, organization-level workflow roles, or valid scoped invitations.
-- Financial plan allocation is not a journal posting. Imported XLSX journal lines remain in **staged** status until the reconciliation and posting policy is fully implemented.
+The uploaded ADM RKA XLSX and 2027 RKA PDF are **example documents only**, not organization or accounting defaults. The application must never seed example organizations, fixed schools/departments, institution-specific unit names, job titles, account codes, cost-sharing percentages, academic categories, question banks or book chapters.
 
-## Implemented in the initial vertical slice
+This branch adds a **new namespace of \`rka_*\` database tables**. Legacy tables and Filament Resources remain untouched. Legacy records are not migrated or copied automatically.
 
-1. Organization membership, branding fields, configurable units, budget cycles and draft budget lines.
-2. Configurable weighted/equal shared-cost allocation with deterministic cent rounding and recipient tenant validation.
-3. Configurable question definitions (structured rules DSL), assignment, internal invitations, acceptance, multi-author answers and optimistic revision check.
-4. Source-linked narrative synthesis, conflict blocking and independent review (a reviewer cannot verify a synthesis authored by the same user).
-5. XLSX journal staging with explicit header mapping, schema validation, input hash idempotency, external journal-line keys and audit events.
-6. Dynamic book section templates and independent editorial review. Published books freeze a snapshot. Initial DOCX/PDF/XLSX outputs derive from that snapshot.
-7. Scoped Filament 2 workspace; no fixed unit, organization name, chapter outline, source account or allocation configuration.
+## Implemented and tested vertical slices
 
-## Manual first-run operations
+- Organization memberships, branding name/color/currency/locale/time zone, configurable units and annual cycles.
+- Draft budget lines; independent reviewer approval and audit events.
+- Equal / weighted shared-cost allocations; integer minor-unit rounding, recipient organization validation, independent approval. These are managerial plans, **not journal postings**.
+- Versioned question definitions with a restricted rule DSL; question assignments include unit, question owner and **explicit independent reviewer**.
+- Internal invitations, acceptance, cancellation/revocation, time-limited permissions, multiple answer revisions with optimistic revision checks.
+- Scoped question listing and detail access: general editors/reviewers cannot enumerate all question content based on role alone.
+- Private supporting-evidence upload and download, named independent review and verified-evidence requirement for evidence-bound synthesis; files are not public.
+- XLSX import to **staging only** with configurable header mapping, file-hash idempotency, source/line overlap rejection, per-journal balance warnings and row validation. No financial actuals are posted from imports.
+- Book sections, independent editorial review and export service skeleton. **Official publication is OFF by default** under \`RKA_ENABLE_OFFICIAL_PUBLICATION=false\`; do not enable until journal reconciliation, KPI Budget and closing are implemented and approved.
+- Explicit superadmin-only **read-only legacy budget preview**, segregated from the new platform. It does not infer the historic budget year, copy records or automatically include their values in KPI calculations.
+- Organization-configured **KPI Budget preview before Sharing Budget** based on approved budget-line categories. It excludes unapproved budgets, shared cost, reconciled actuals and eliminations; it is explicitly labeled NONFINAL.
+- Replacement internal profile page after removing unavailable third-party \`ryangjchandler/filament-profile\` dependency; functionality includes name/email and password update.
+- Automated SQLite/CI tests for access, financial approval, answer revisions, evidence, import staging, book-publication gates, allocation and preliminary KPI. A MySQL 8 CI matrix job is also configured.
 
-1. Run migrations on a staging copy after obtaining a DB backup; verify legacy migrations and FK compatibility.
-2. Sign in with an existing user holding Spatie role \`superadmin\` or \`admin-keuangan\`.
-3. Navigate to **Rencana Kerja & Anggaran → Workspace RKA**. Create the organization with its own name.
-4. Configure branding, units, memberships and an RKA cycle. Add institution-defined question banks and book sections. No example organization is created automatically.
-5. Invite only existing authenticated users who are members of that organization.
-6. For ledger import, use a custom XLSX mapped to header keys \`line_id\`, \`journal_no\`, \`date\` (yyyy-mm-dd), \`account_code\`, \`debit\`, \`credit\`. Optional keys: \`unit_code\`, \`posting_status\`, \`entry_kind\`, \`related_reference\`. Header mapping JSON can translate external column names. Identity values must be unique within source+organization. Use staged data for verification, not official reporting.
+## Safe first-run checklist
 
-## Strictly unfinished — do not label production-ready
+1. Back up the database before staging migrations. Never run \`migrate:fresh\` against production.
+2. Install packages using the committed lock file, then run \`php artisan migrate --force\` **only in a controlled staging environment** after checking migrations and privileges.
+3. Sign in with an existing authorized platform bootstrap account (Spatie \`superadmin\` or \`admin-keuangan\`), create a new organization with the user's own name, and assign existing accounts to it.
+4. Create units, budget cycles and custom budget categories. Do **not** assume example document structures.
+5. Create questions, explicitly assign independent reviewers and scoped contributors, and configure the evidence policy.
+6. When importing XLSX journal files, provide \`line_id\`, \`journal_no\`, \`date\`, \`account_code\`, \`debit\`, \`credit\` columns, mapping any institution-specific headers. Data is staged and must not be treated as verified actuals.
+7. Configure KPI category profile in a draft cycle; view the preview labeled "before Sharing Budget."
+8. Keep \`RKA_ENABLE_OFFICIAL_PUBLICATION=false\` and verify the publication gate with a negative test.
+9. Use superadmin legacy preview to compare historical data without modifying old records.
+10. Perform database-specific schema tests, access-role UAT and complete business-flow tests before requesting a merge.
 
-- Organization-wide administrator controls need dedicated configuration pages, branding/logo upload, revocable invitation management and granular permission evaluation for evidence files.
-- Final approval policy engine, risk thresholds, SoD across all financial workflows, SLA escalation and delegated approvals are only **data model / design**, not operationally enforced for every action.
-- Cost-pool configuration supports only equal/weighted calculation. Historical comparison, other driver algorithms, journal-aware elimination and reconciled KPI Budget are not completed.
-- XLSX import stages normalized rows but does not implement the final posted-actual journal reconciliation, corrections, accounting close, authoritative ledger, or financial publication workflow.
-- Book editor and exports are a working **text-first foundation**, not a faithful enterprise book layout: no advanced DOCX tables/charts/TOC, full evidence linking, or full style-preserving XLSX template import/export.
-- The app has no independent browser UAT evidence; tests, full integration and security audit must be evaluated before merge/deploy.
+## Compliance and deliberate restrictions
 
-## Legacy safety
+- Both **organizations** and individual **question instances** have authorization controls.
+- A reviewer must be assigned to the question, not merely possess the global reviewer role; reviewers cannot verify their own synthesis.
+- A user may not accept another user's invitation, contribute after revocation, or use unverified evidence to approve evidence-required claims.
+- Uploads use the local private disk, scoped storage paths and a controlled download endpoint. Production still needs malicious-file scanning, advanced data-retention rules, and granular document classification.
+- No global budget-role privilege is granted automatically by creating a local organization membership.
+- Legacy preview is **superadmin-only** because the original records do not have reliable organization IDs or budget-year references.
+- Financial publication stays blocked. Only preview/test fixtures can enable the export snapshot code path under controlled test configuration.
+- Staff and approver roles are currently **functional role values**; dynamic custom positions/delegation, risk/materiality workflow and SLA remain pending.
 
-- Do not remove \`rkas\`, monthly columns, or existing Filament Resources.
-- Audit the current monthly display callback: it saves computed values during rendering, which can mutate records on a read.
-- Audit \`User::canAccessFilament()\` returning true before widening app access.
-- Treat legacy values stored as strings as a migration hazard; use decimal values and parity checks for new budget amounts.
-- Never auto-enable the new module for every user or tenant by migrating arbitrary legacy \`unit_id\` data into memberships.
+## Known gaps — DO NOT merge as completed RKA end-to-end or deploy to production
 
-## Planned next workstreams
+1. Full journal mapping, balanced posting/reversal processing, prevention of double counting at the ledger/consolidation layer, cost-pool source reconciliation, account/unit mapping, period closing, and authoritative actuals are **not implemented**. XLSX import is staging only.
+2. Complete KPI Budget (with/without special funding categories, actuals, forecasts, after allocation, multi-period profiles, budget-vs-actual) is not implemented. The new calculator is **pre-sharing budget preview only**.
+3. Full approval engine: role/position assignment, delegated authority, dynamic per-risk thresholds, unit disputes, SLA escalation, and SoD for every financial action require further implementation.
+4. Book-content blocks, automatic data-linked tables/charts, professional DOCX layout with a TOC, document branding/logo, and PDF/XLSX report parity require further work.
+5. Evidence content scanning, conflict resolution UI and full claim-level provenance are incomplete.
+6. Legacy RKA adapters presently provide inspection **only**. Mapping legacy unit IDs, accounting periods, parent/child sums and string-valued monetary amounts to the new schema has not been approved or performed.
+7. CI covers selected unit/feature tests; MySQL and complete browser UAT results must be checked before staging deployment. Passing CI alone does not prove production readiness.
 
-1. Tenant configuration UX, permission and evidence policies, audit access review, full SoD.
-2. Budget baseline/revision approvals, mapping of existing budget rows and richer cost-pool drivers.
-3. XLSX to reconciled actuals, journal pairing, reversal and consolidation policies, KPI profiles.
-4. Content blocks with verified datasets, multi-contributor fact checks, section dependencies, workflow.
-5. Professional DOCX/PDF/XLSX rendering parity, full end-to-end simulated unit/org regression, staging UAT.
+## Rollout strategy
 
-Never claim this initial pull request implements the full business blueprint.
+The project must use **expand → reconcile → switch**. Do not drop legacy columns/tables/resources. Verify parity on isolated staging data, create rollback plans, run authorization adversarial tests, test rendering of long documents, and keep the PR draft until critical accounting workflows are independently validated.
+
+Known baseline risks to audit separately: legacy RKA table display may mutate records during formatting; global \`User::canAccessFilament()\` currently returns true. Neither should be changed casually without regression coverage for existing roles and pages.
