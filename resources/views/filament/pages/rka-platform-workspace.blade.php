@@ -496,6 +496,7 @@
                                         @endif
                                     </div>
                                     <p class="text-sm mt-2">Jurnal posted: {{ $run->report_data['posted_line_count'] ?? 0 }} · Blocker: <strong>{{ $run->report_data['blocker_count'] ?? '-' }}</strong></p>
+                                    <p class="text-xs mt-1 text-gray-500">Pengecualian administratif: {{ $run->report_data['approved_exception_count'] ?? 0 }} · Nominal yang tidak masuk kategori KPI (minor unit): {{ $run->report_data['excluded_budget_minor'] ?? 0 }}</p>
                                     <div class="grid sm:grid-cols-3 gap-2 text-sm mt-3">
                                         <span>Pendapatan konsolidasi: {{ $run->report_data['consolidated']['income'] ?? '-' }}</span>
                                         <span>Beban konsolidasi: {{ $run->report_data['consolidated']['expense'] ?? '-' }}</span>
