@@ -6,11 +6,12 @@ use App\Models\User;
 use App\Models\RkaPlatform\{
     Organization, Membership, Unit, Cycle, BudgetLine, SharedPool, Question,
     QuestionInstance, Invitation, Answer, Synthesis, BookTemplate, Book, BookSection,
-    JournalBatch, NarrativeConflict
+    JournalBatch, NarrativeConflict, ApprovalPolicy, ApprovalRequest
 };
 use App\Services\RkaPlatform\{
     TenantAccess, AuditTrail, ContributionService, QuestionRules,
-    SharedCostAllocator, JournalSpreadsheetImporter, BookPublishingService, FinancialApprovalService, EvidenceService
+    SharedCostAllocator, JournalSpreadsheetImporter, BookPublishingService, FinancialApprovalService,
+    EvidenceService, FinancialReconciliationService, FinancialClosingService
 };
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
@@ -88,6 +89,19 @@ class RkaPlatformWorkspace extends Page
     public ?int $legacyUnitId = null;
     public array $legacyPreview = [];
     public string $kpiProfileJson = '{"income_categories":[],"expense_categories":[]}';
+    public ?int $memberUnitId = null;
+    public string $mappingSource = 'primary';
+    public string $mappingAccount = '';
+    public string $mappingClass = 'expense';
+    public ?int $mappingUnitId = null;
+    public string $policyAction = 'cycle.close';
+    public string $policyRisk = 'normal';
+    public string $policyStepsJson = '[]';
+    public string $cycleApprovalReason = '';
+    public ?int $disputePoolId = null;
+    public ?int $disputeUnitId = null;
+    public string $disputeReason = '';
+    public string $disputeResolution = '';
 
     public function mount(): void
     {
@@ -222,7 +236,8 @@ class RkaPlatformWorkspace extends Page
         $this->managers();
         $this->validate([
             'memberEmail' => 'required|email|max:255',
-            'memberRole' => 'required|in:admin,finance,reviewer,editor,publisher,contributor',
+            'memberRole' => 'required|in:admin,finance,reviewer,editor,publisher,contributor,unit_manager',
+            'memberUnitId' => 'nullable|integer',
         ]);
         $user = User::query()->where('email', $this->memberEmail)->first();
         if (!$user) throw ValidationException::withMessages(['memberEmail' => 'Pengguna harus memiliki akun existing.']);
@@ -231,12 +246,19 @@ class RkaPlatformWorkspace extends Page
         if ($existing && in_array('owner', $existing->roles ?? [], true)) {
             throw ValidationException::withMessages(['memberEmail' => 'Kewenangan owner tidak boleh ditimpa.']);
         }
+        if ($this->memberUnitId !== null) {
+            Unit::where('organization_id', $this->orgId())->findOrFail($this->memberUnitId);
+        }
+        if ($this->memberRole === 'unit_manager' && $this->memberUnitId === null) {
+            throw ValidationException::withMessages(['memberUnitId' => 'Penanggung jawab unit wajib memiliki unit.']);
+        }
         $membership = Membership::updateOrCreate(
             ['organization_id' => $this->orgId(), 'user_id' => $user->id],
-            ['roles' => [$this->memberRole], 'active' => true]
+            ['roles' => [$this->memberRole], 'unit_id' => $this->memberUnitId, 'active' => true]
         );
         $this->audit()->record($this->orgId(), (int)auth()->id(), 'membership.assigned', 'membership', $membership->id, ['role' => $this->memberRole]);
         $this->memberEmail = '';
+        $this->memberUnitId = null;
         $this->notify('success', 'Anggota ditambahkan.');
     }
 
@@ -533,6 +555,120 @@ class RkaPlatformWorkspace extends Page
         $this->notify('success', 'Batch XLSX diterima: '.$batch->id.' (status staged).');
     }
 
+    public function draftJournalMapping(): void
+    {
+        $this->validate([
+            'mappingSource' => 'required|regex:/^[a-zA-Z0-9_.-]{2,60}$/',
+            'mappingAccount' => 'required|string|max:255',
+            'mappingClass' => 'required|in:income,expense,internal_income,internal_expense,clearing,non_pnl',
+            'mappingUnitId' => 'nullable|integer',
+        ]);
+        app(FinancialReconciliationService::class)->createMapping(
+            $this->cycle(), (int)auth()->id(), $this->mappingSource, $this->mappingAccount,
+            $this->mappingClass, $this->mappingUnitId
+        );
+        $this->mappingAccount = '';
+        $this->notify('success', 'Mapping tersimpan sebagai draft dan menunggu reviewer independen.');
+    }
+
+    public function approveJournalMapping(int $id): void
+    {
+        $row = DB::table('rka_journal_account_mappings')->where('organization_id',$this->orgId())
+            ->where('cycle_id', $this->cycle()->id)->where('id',$id)->first();
+        if (!$row) abort(404);
+        app(FinancialReconciliationService::class)->approveMapping($this->orgId(), $id, (int)auth()->id());
+        $this->notify('success', 'Mapping diaktifkan.');
+    }
+
+    public function verifyJournalBatch(int $id): void
+    {
+        $batch = JournalBatch::where('organization_id', $this->orgId())->findOrFail($id);
+        app(FinancialReconciliationService::class)->verifyBatch($batch, (int)auth()->id());
+        $this->notify('success', 'Integritas sumber batch diverifikasi. Rekonsiliasi tetap diperlukan.');
+    }
+
+    public function prepareReconciliation(): void
+    {
+        $id = app(FinancialReconciliationService::class)->prepare($this->cycle(), (int)auth()->id());
+        $this->notify('success', 'Laporan rekonsiliasi #'.$id.' tersimpan. Periksa blocker sebelum mengesahkan.');
+    }
+
+    public function verifyReconciliation(int $id): void
+    {
+        app(FinancialReconciliationService::class)->verify($this->cycle(), $id, (int)auth()->id());
+        $this->notify('success', 'Snapshot rekonsiliasi diverifikasi secara independen.');
+    }
+
+    public function proposeClosingPolicy(): void
+    {
+        $this->managers();
+        $this->validate([
+            'policyAction' => 'required|in:cycle.close,cycle.reopen',
+            'policyRisk' => 'required|in:normal,high',
+        ]);
+        try { $steps = json_decode($this->policyStepsJson, true, 512, JSON_THROW_ON_ERROR); }
+        catch (\JsonException $e) {
+            throw ValidationException::withMessages(['policyStepsJson' => 'Tahapan approval harus JSON yang valid.']);
+        }
+        if (!is_array($steps)) throw ValidationException::withMessages(['policyStepsJson' => 'Gunakan array tahapan approval.']);
+        app(FinancialClosingService::class)->proposePolicy(
+            $this->orgId(), (int)auth()->id(), $this->policyAction, $steps, $this->policyRisk
+        );
+        $this->notify('success', 'Kebijakan draft dibuat dan memerlukan aktivasi terpisah.');
+    }
+
+    public function activateClosingPolicy(int $id): void
+    {
+        $policy = ApprovalPolicy::where('organization_id',$this->orgId())->findOrFail($id);
+        app(FinancialClosingService::class)->activatePolicy($policy, (int)auth()->id());
+        $this->notify('success', 'Kebijakan closing diaktifkan.');
+    }
+
+    public function submitCycleApproval(string $action): void
+    {
+        if (!in_array($action, ['cycle.close','cycle.reopen'], true)) abort(404);
+        $this->validate(['cycleApprovalReason' => 'required|string|min:10|max:3000']);
+        app(FinancialClosingService::class)->request(
+            $this->cycle(), (int)auth()->id(), $action, $this->cycleApprovalReason
+        );
+        $this->cycleApprovalReason = '';
+        $this->notify('success', 'Permintaan closing/reopen diajukan ke tahap persetujuan pertama.');
+    }
+
+    public function decideCycleApproval(int $id, bool $approve): void
+    {
+        $req = ApprovalRequest::where('organization_id',$this->orgId())
+            ->where('subject_type','cycle')->where('subject_id',$this->cycle()->id)->findOrFail($id);
+        app(FinancialClosingService::class)->decide(
+            $req, (int)auth()->id(), $approve, $approve ? '' : 'Ditolak setelah peninjauan data dan bukti sumber.'
+        );
+        $this->notify('success', 'Keputusan persetujuan dicatat.');
+    }
+
+    public function raiseSharingDispute(): void
+    {
+        $this->validate([
+            'disputePoolId' => 'required|integer', 'disputeUnitId' => 'required|integer',
+            'disputeReason' => 'required|string|min:10|max:2000',
+        ]);
+        app(FinancialClosingService::class)->raiseDispute(
+            $this->cycle(), (int)auth()->id(), $this->disputePoolId, $this->disputeUnitId,
+            $this->disputeReason
+        );
+        $this->disputeReason = '';
+        $this->notify('success', 'Sengketa tercatat; closing tertahan sampai diselesaikan.');
+    }
+
+    public function resolveSharingDispute(int $id): void
+    {
+        $this->validate(['disputeResolution' => 'required|string|min:10|max:2000']);
+        app(FinancialClosingService::class)->resolveDispute(
+            $this->cycle(), $id, (int)auth()->id(), $this->disputeResolution
+        );
+        $this->disputeResolution = '';
+        $this->notify('success', 'Resolusi sengketa tercatat untuk audit.');
+    }
+
     public function createTemplate(): void
     {
         $this->managers();
@@ -627,6 +763,10 @@ class RkaPlatformWorkspace extends Page
             'canEditBook' => false, 'canApproveBookSection' => false, 'evidence' => collect(),
             'canPreviewLegacy' => false, 'legacyUnits' => collect(),
             'kpiPreview' => null,
+            'accountMappings' => collect(), 'reconRuns' => collect(),
+            'closingPolicies' => collect(), 'cycleApprovals' => collect(),
+            'cycleClosings' => collect(), 'sharingDisputes' => collect(),
+            'canControlClose' => false, 'canRaiseDispute' => false, 'cycleCurrent' => null,
             'units' => collect(), 'users' => collect(), 'cycles' => collect(), 'questions' => collect(),
             'instances' => collect(), 'invitations' => collect(), 'answers' => collect(), 'syntheses' => collect(),
             'books' => collect(), 'bookSections' => collect(), 'templates' => collect(),
@@ -641,6 +781,8 @@ class RkaPlatformWorkspace extends Page
         }
         $data['isManager'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin']);
         $data['isFinance'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','finance']);
+        $data['canControlClose'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','finance','publisher']);
+        $data['canRaiseDispute'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','finance','unit_manager','contributor']);
         $data['canEditBook'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','editor']);
         $data['canApproveBookSection'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','reviewer']);
         $data['units'] = Unit::where('organization_id', $orgId)->orderBy('name')->get();
@@ -652,6 +794,39 @@ class RkaPlatformWorkspace extends Page
         $data['batches'] = $data['isFinance'] ? JournalBatch::where('organization_id', $orgId)->latest()->limit(12)->get() : collect();
         if ($this->cycleId) {
             $cycle = $this->cycle();
+            $data['cycleCurrent'] = $cycle;
+            if ($data['isFinance']) {
+                $data['accountMappings'] = DB::table('rka_journal_account_mappings')
+                    ->where('organization_id', $orgId)->where('cycle_id',$cycle->id)
+                    ->orderByDesc('id')->limit(30)->get();
+                $data['reconRuns'] = DB::table('rka_reconciliation_runs')
+                    ->where('organization_id', $orgId)->where('cycle_id',$cycle->id)
+                    ->orderByDesc('version')->limit(8)->get()->map(function ($run) {
+                        $run->report_data = json_decode($run->report, true) ?: [];
+                        return $run;
+                    });
+            }
+            if ($data['isManager']) {
+                $data['closingPolicies'] = ApprovalPolicy::where('organization_id', $orgId)
+                    ->whereIn('action', ['cycle.close','cycle.reopen'])->latest()->limit(12)->get();
+            }
+            if ($data['canControlClose']) {
+                $data['cycleApprovals'] = ApprovalRequest::where('organization_id', $orgId)
+                    ->where('subject_type','cycle')->where('subject_id',$cycle->id)
+                    ->latest()->limit(15)->get();
+                $data['cycleClosings'] = DB::table('rka_cycle_closings')
+                    ->where('organization_id',$orgId)->where('cycle_id',$cycle->id)
+                    ->orderByDesc('version')->limit(5)->get();
+            }
+            if ($data['canRaiseDispute']) {
+                $disputeQuery = DB::table('rka_sharing_disputes')
+                    ->where('organization_id',$orgId)->where('cycle_id',$cycle->id);
+                if (!$data['isFinance']) {
+                    $ownUnit = $this->access()->membership($orgId, (int)auth()->id())->unit_id;
+                    $disputeQuery->where('unit_id', $ownUnit ?: 0);
+                }
+                $data['sharingDisputes'] = $disputeQuery->orderByDesc('id')->limit(30)->get();
+            }
             $data['instances'] = QuestionInstance::where('organization_id', $orgId)->where('cycle_id', $cycle->id)
                 ->where(function ($query) use ($orgId) {
                     if ($this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin'])) return;
