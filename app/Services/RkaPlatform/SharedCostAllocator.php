@@ -19,7 +19,9 @@ class SharedCostAllocator
 
     public function fromMinor(int $amount): string
     {
-        return intdiv($amount, 100) . '.' . str_pad((string)($amount % 100), 2, '0', STR_PAD_LEFT);
+        $sign = $amount < 0 ? '-' : '';
+        $absolute = abs($amount);
+        return $sign.intdiv($absolute, 100).'.'.str_pad((string)($absolute % 100), 2, '0', STR_PAD_LEFT);
     }
 
     // Driver keys are unit IDs; values are nonnegative numeric weights. This does NOT post journals.
