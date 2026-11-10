@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Models\RkaPlatform\{Organization, Membership, Cycle, BudgetLine, SharedPool};
+use App\Models\RkaPlatform\{Organization, Membership, Unit, Cycle, BudgetLine, SharedPool};
 use App\Services\RkaPlatform\FinancialApprovalService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,9 +36,11 @@ class RkaPlatformFinancialApprovalTest extends TestCase
         $svc->approveBudget($budget, $reviewer->id);
         $this->assertSame('approved', $budget->fresh()->status);
 
+        $unit = Unit::create(['organization_id' => $org->id, 'code' => 'U', 'name' => 'Unit']);
         $pool = SharedPool::create(['organization_id' => $org->id, 'cycle_id' => $cycle->id,
             'code' => 'POOL-1', 'name' => 'Shared expense', 'amount' => '50.00',
-            'method' => 'equal', 'drivers' => ['1' => 1], 'allocations' => ['1' => '50.00'],
+            'method' => 'equal', 'drivers' => [(string)$unit->id => 1],
+            'allocations' => [(string)$unit->id => '50.00'],
             'created_by' => $creator->id]);
         $svc->approvePool($pool, $reviewer->id);
         $this->assertSame('approved', $pool->fresh()->status);
