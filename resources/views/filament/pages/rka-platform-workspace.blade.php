@@ -299,6 +299,33 @@
 
                 @if($isFinance)
                     <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                        <summary class="font-semibold cursor-pointer">KPI Budget — Pratinjau Sebelum Sharing Budget</summary>
+                        <form wire:submit.prevent="saveKpiProfile" class="space-y-2 mt-3">
+                            <label class="text-sm font-medium block">Kategori pendapatan dan biaya untuk siklus ini</label>
+                            <p class="text-xs text-gray-500">Daftar kategori ditentukan oleh organisasi. Contoh format: {"income_categories":["income"],"expense_categories":["expense"]}. Angka contoh bukan kebijakan bawaan sistem.</p>
+                            <textarea wire:model.defer="kpiProfileJson" rows="3" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
+                            <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Simpan Profil KPI</button>
+                        </form>
+                        @if($kpiPreview)
+                            <div class="mt-4 space-y-2">
+                                <p class="text-xs text-amber-700 font-medium">{{ $kpiPreview['warning'] }}</p>
+                                <p class="text-xs text-gray-500">Draft: {{ $kpiPreview['pending_lines'] }} baris; kategori tidak dipetakan: {{ $kpiPreview['unmapped_lines'] }} baris; Cost Pool belum direkonsiliasi: {{ $kpiPreview['shared_pools'] }}.</p>
+                                <div class="overflow-x-auto"><table class="w-full text-sm">
+                                    <thead><tr class="text-left"><th class="p-2">Unit</th><th class="p-2">Pendapatan</th><th class="p-2">Biaya langsung</th><th class="p-2">Surplus sebelum sharing</th></tr></thead>
+                                    <tbody>
+                                        @foreach($kpiPreview['rows'] as $kpiRow)
+                                            <tr class="border-t dark:border-gray-700"><td class="p-2">{{ $kpiRow['unit'] }}</td>
+                                                <td class="p-2">{{ $kpiRow['income'] }}</td>
+                                                <td class="p-2">{{ $kpiRow['cost'] }}</td>
+                                                <td class="p-2">{{ $kpiRow['surplus_before_sharing'] }}</td></tr>
+                                        @endforeach
+                                    </tbody>
+                                </table></div>
+                                <p class="text-sm font-semibold">Total organisasi: {{ $kpiPreview['surplus_before_sharing'] }} (sebelum biaya bersama)</p>
+                            </div>
+                        @endif
+                    </details>
+                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Anggaran dan Sharing Budget</summary>
                         <div class="grid lg:grid-cols-2 gap-5 mt-4">
                             <form wire:submit.prevent="addBudget" class="space-y-2">
