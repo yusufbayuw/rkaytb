@@ -31,6 +31,7 @@ class RkaPlatformBookTest extends TestCase
         $section = BookSection::create(['book_id' => $book->id, 'code' => 'intro',
             'title' => 'Introduction', 'required' => true]);
 
+        config()->set('rka_platform.enable_official_publication', true);
         $service = app(BookPublishingService::class);
         try {
             $service->publish($book, $publisher->id);

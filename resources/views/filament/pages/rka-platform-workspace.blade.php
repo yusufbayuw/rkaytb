@@ -46,6 +46,18 @@
 
             @if($isManager)
                 <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <summary class="font-semibold cursor-pointer">Identitas Organisasi / White Label</summary>
+                    <form wire:submit.prevent="updateBranding" class="grid md:grid-cols-2 gap-3 mt-4">
+                        <div><label class="block text-xs mb-1">Nama tampilan</label><input wire:model.defer="orgBrand" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                        <div><label class="block text-xs mb-1">Warna utama (HEX)</label><input wire:model.defer="orgColor" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                        <div><label class="block text-xs mb-1">Mata uang (kode ISO)</label><input wire:model.defer="orgCurrency" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                        <div><label class="block text-xs mb-1">Locale</label><input wire:model.defer="orgLocale" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                        <div><label class="block text-xs mb-1">Zona waktu IANA</label><input wire:model.defer="orgTimezone" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                        <div class="flex items-end"><button type="submit" class="px-4 py-2 rounded-lg bg-primary-600 text-white">Simpan Pengaturan</button></div>
+                    </form>
+                    <p class="text-xs text-gray-500 mt-3">Logo dokumen dan pengaturan tipografi lanjutan belum tersedia pada tahap ini.</p>
+                </details>
+                <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                     <summary class="font-semibold cursor-pointer">Pengaturan Organisasi, Unit dan Pengguna</summary>
                     <div class="grid lg:grid-cols-3 gap-5 mt-4">
                         <form wire:submit.prevent="createUnit" class="space-y-2">
@@ -110,6 +122,16 @@
                                         <option value="{{ $user->id }}">{{ $user->name }}</option>
                                     @endforeach
                                 </select>
+                                <label class="text-xs">Unit pemilik (opsional)</label>
+                                <select wire:model.defer="newUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                    <option value="">Tidak terikat unit</option>
+                                    @foreach($units as $unit)<option value="{{ $unit->id }}">{{ $unit->name }}</option>@endforeach
+                                </select>
+                                <label class="text-xs">Reviewer independen</label>
+                                <select wire:model.defer="newReviewerUserId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                    <option value="">Pilih reviewer</option>
+                                    @foreach($users as $user)<option value="{{ $user->id }}">{{ $user->name }}</option>@endforeach
+                                </select>
                                 <label class="text-xs">Konteks aturan JSON (opsional)</label>
                                 <textarea wire:model.defer="questionContextJson" rows="2" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Buat Penugasan</button>
@@ -137,16 +159,27 @@
                         @if($instanceId)
                             <h3 class="font-semibold">Jawaban dan Sintesis</h3>
                             <p class="text-xs text-gray-500 mt-1">Jawaban tiap kontributor disimpan sebagai versi tersendiri.</p>
+                            @if($canAnswer)
                             <form wire:submit.prevent="submitAnswer" class="space-y-2 mt-4">
                                 <label class="text-sm font-medium">Jawaban saya (revisi {{ $answerRevision }})</label>
                                 <textarea wire:model.defer="answerText" rows="4" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Berikan jawaban berdasarkan fakta dan sumber."></textarea>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Kirim Jawaban</button>
                             </form>
+                            @if($answerRevision > 0)
+                                <form wire:submit.prevent="uploadAnswerEvidence" class="flex flex-wrap gap-2 items-end mt-3">
+                                    <div><label class="block text-xs mb-1">Bukti pendukung (privat)</label>
+                                        <input wire:model="answerEvidenceFile" type="file" accept=".pdf,.docx,.xlsx,.jpg,.jpeg,.png" /></div>
+                                    <button type="submit" class="px-3 py-2 rounded-lg border" wire:loading.attr="disabled">Unggah Bukti</button>
+                                </form>
+                            @endif
+                            @endif
                             <div class="space-y-2 mt-5">
                                 <h4 class="font-medium text-sm">Jawaban terkumpul</h4>
                                 @forelse($answers as $answer)
                                     <label class="block border dark:border-gray-600 rounded-lg p-3 text-sm">
-                                        <input type="checkbox" value="{{ $answer->id }}" wire:model="synthesisAnswerIds" class="mr-2" />
+                                        @if($isManager || $isInstanceOwner)
+                                            <input type="checkbox" value="{{ $answer->id }}" wire:model="synthesisAnswerIds" class="mr-2" />
+                                        @endif
                                         <span class="text-xs text-gray-500">Pengguna #{{ $answer->author_id }} · Rev {{ $answer->revision }}</span>
                                         <p class="mt-2 whitespace-pre-wrap">{{ $answer->content }}</p>
                                     </label>
@@ -154,17 +187,35 @@
                                     <p class="text-sm text-gray-500">Belum ada jawaban.</p>
                                 @endforelse
                             </div>
+                            @if($isManager || $isInstanceOwner)
                             <form wire:submit.prevent="synthesize" class="mt-4 space-y-2">
                                 <label class="text-sm font-medium">Draf sintesis berdasarkan jawaban terpilih</label>
                                 <textarea wire:model.defer="synthesisText" rows="4" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Sintesis</button>
                             </form>
+                            @endif
+                            <div class="mt-4 space-y-2">
+                                <h4 class="font-medium text-sm">Bukti jawaban</h4>
+                                @forelse($evidence as $document)
+                                    <div class="border dark:border-gray-600 rounded-lg p-2 flex flex-wrap gap-3 justify-between text-sm">
+                                        <span>{{ $document->original_name }} · {{ $document->status }}</span>
+                                        <div class="flex gap-2">
+                                            <a class="underline" href="{{ route('rka-platform.evidence.download', ['evidence' => $document->id]) }}">Unduh</a>
+                                            @if($canReview && $document->status === 'pending' && $document->uploaded_by !== auth()->id())
+                                                <button type="button" wire:click="verifyEvidence({{ $document->id }})" class="border rounded px-2">Verifikasi</button>
+                                            @endif
+                                        </div>
+                                    </div>
+                                @empty
+                                    <p class="text-xs text-gray-500">Belum ada bukti yang terunggah.</p>
+                                @endforelse
+                            </div>
                             <h4 class="font-medium text-sm mt-5">Riwayat sintesis</h4>
                             @foreach($syntheses as $synthesis)
                                 <div class="border dark:border-gray-600 rounded-lg p-3 my-2 text-sm">
                                     <div class="flex justify-between"><span>Versi {{ $synthesis->version }}</span><span>{{ $synthesis->status }}</span></div>
                                     <p class="whitespace-pre-wrap my-2">{{ $synthesis->content }}</p>
-                                    @if($synthesis->status === 'pending_review' && $synthesis->author_id !== auth()->id())
+                                    @if($canReview && $synthesis->status === 'pending_review' && $synthesis->author_id !== auth()->id())
                                         <button wire:click="verifySynthesis({{ $synthesis->id }})" class="px-3 py-1 border rounded-lg">Verifikasi (jika berwenang)</button>
                                     @endif
                                 </div>
@@ -178,7 +229,7 @@
                 @if($instanceId)
                     <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Undangan Kontributor</summary>
-                        @if($isManager)
+                        @if($isManager || $isInstanceOwner)
                             <form wire:submit.prevent="invite" class="flex flex-wrap gap-3 items-end mt-4">
                                 <div><label class="block text-sm mb-1">Pengguna</label>
                                     <select wire:model.defer="inviteUserId" class="border rounded-lg p-2 dark:bg-gray-900">
@@ -194,7 +245,10 @@
                             <div class="flex flex-wrap gap-2 justify-between items-center border-b dark:border-gray-600 py-3 text-sm">
                                 <span>Pengguna #{{ $invitation->invited_user_id }} · {{ $invitation->status }} · berlaku sampai {{ $invitation->expires_at->format('d M Y') }}</span>
                                 @if($invitation->invited_user_id === auth()->id() && $invitation->status === 'invited')
-                                    <button wire:click="acceptInvite({{ $invitation->id }})" class="px-3 py-1 border rounded-lg">Terima undangan</button>
+                                    <button type="button" wire:click="acceptInvite({{ $invitation->id }})" class="px-3 py-1 border rounded-lg">Terima undangan</button>
+                                @endif
+                                @if(($isManager || $isInstanceOwner) && in_array($invitation->status, ['invited','accepted','completed']))
+                                    <button type="button" wire:click="revokeInvite({{ $invitation->id }})" class="px-3 py-1 border rounded-lg">Cabut</button>
                                 @endif
                             </div>
                         @empty
@@ -334,11 +388,15 @@
                                     @endforeach
                                 </div>
                                 @if($sectionId)
+                                    @if($isManager || $org && \App\Models\RkaPlatform\Membership::where('organization_id', $org->id)->where('user_id', auth()->id())->where('active', true)->get()->contains(fn ($m) => in_array('editor', $m->roles ?? [])))
                                     <form wire:submit.prevent="saveSection" class="mt-4 space-y-2">
                                         <label class="font-medium text-sm">Isi bagian terpilih</label>
                                         <textarea wire:model.defer="sectionContent" rows="7" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Narasi bagian buku"></textarea>
                                         <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Review Bagian</button>
                                     </form>
+                                    @else
+                                        <div class="mt-3 whitespace-pre-wrap text-sm">{{ $sectionContent }}</div>
+                                    @endif
                                 @endif
                                 @php $selectedBook = $books->firstWhere('id', $bookId); @endphp
                                 @if($selectedBook && $selectedBook->status === 'published')
@@ -348,7 +406,11 @@
                                         @endforeach
                                     </div>
                                 @elseif($selectedBook)
-                                    <button wire:click="publishBook" class="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg">Validasi dan Terbitkan Snapshot</button>
+                                    @if(config('rka_platform.enable_official_publication', false))
+                                        <button wire:click="publishBook" class="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg">Validasi dan Terbitkan Snapshot</button>
+                                    @else
+                                        <p class="mt-4 text-xs text-amber-700">Penerbitan resmi dinonaktifkan sampai validasi jurnal, KPI, dan laporan lengkap diimplementasikan.</p>
+                                    @endif
                                 @endif
                             @else
                                 <p class="text-sm text-gray-500">Pilih buku untuk mulai menyusun dan mereview isi.</p>

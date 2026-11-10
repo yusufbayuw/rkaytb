@@ -8,4 +8,6 @@ return [
     'bootstrap_roles' => ['superadmin'],
     'invitation_max_days' => (int) env('RKA_INVITATION_MAX_DAYS', 30),
     'allow_external_invitations' => false,
+    // Release gate: financial publication must remain off until reconciled actuals, KPI and closing pass UAT.
+    'enable_official_publication' => env('RKA_ENABLE_OFFICIAL_PUBLICATION', false),
 ];

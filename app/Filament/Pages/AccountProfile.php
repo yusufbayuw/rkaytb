@@ -19,7 +19,7 @@ class AccountProfile extends Page
     public string $email = '';
     public string $currentPassword = '';
     public string $newPassword = '';
-    public string $newPasswordConfirmation = '';
+    public string $newPassword_confirmation = '';
 
     public function mount(): void
     {
@@ -37,7 +37,7 @@ class AccountProfile extends Page
         $changedEmail = $user->email !== $this->email;
         $user->name = trim($this->name);
         $user->email = trim($this->email);
-        if ($changedEmail && method_exists($user, 'getEmailVerifiedAt')) {
+        if ($changedEmail) {
             $user->email_verified_at = null;
         }
         $user->save();
@@ -56,7 +56,7 @@ class AccountProfile extends Page
         }
         $user->password = Hash::make($this->newPassword);
         $user->save();
-        $this->reset(['currentPassword', 'newPassword', 'newPasswordConfirmation']);
+        $this->reset(['currentPassword', 'newPassword', 'newPassword_confirmation']);
         $this->notify('success', 'Kata sandi telah diperbarui.');
     }
 }

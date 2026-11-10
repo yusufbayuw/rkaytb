@@ -18,7 +18,7 @@
                 <div><label for="new-password" class="block text-sm mb-1">Kata sandi baru (minimal 12 karakter)</label>
                     <input id="new-password" wire:model.defer="newPassword" type="password" class="border w-full rounded-lg p-2 dark:bg-gray-900" autocomplete="new-password" /></div>
                 <div><label for="new-password-confirmation" class="block text-sm mb-1">Ulangi kata sandi baru</label>
-                    <input id="new-password-confirmation" wire:model.defer="newPasswordConfirmation" type="password" class="border w-full rounded-lg p-2 dark:bg-gray-900" autocomplete="new-password" /></div>
+                    <input id="new-password-confirmation" wire:model.defer="newPassword_confirmation" type="password" class="border w-full rounded-lg p-2 dark:bg-gray-900" autocomplete="new-password" /></div>
                 <button class="px-4 py-2 rounded-lg bg-primary-600 text-white" type="submit">Ubah Kata Sandi</button>
             </form>
         </div>

@@ -38,6 +38,9 @@ class BookPublishingService
     public function publish(Book $book, int $actor): Book
     {
         $this->access->requireRole($book->organization_id, $actor, ['owner', 'publisher']);
+        if (!config('rka_platform.enable_official_publication', false)) {
+            throw ValidationException::withMessages(['book' => 'Penerbitan resmi dinonaktifkan sampai rekonsiliasi, KPI, dan closing diverifikasi.']);
+        }
         return DB::transaction(function () use ($book, $actor) {
             $book = Book::query()->lockForUpdate()->findOrFail($book->id);
             if ($book->status !== 'draft') throw ValidationException::withMessages(['book' => 'Buku tidak dalam status draft.']);
