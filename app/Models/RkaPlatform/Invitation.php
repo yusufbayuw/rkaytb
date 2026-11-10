@@ -13,5 +13,5 @@ class Invitation extends Model
         'expires_at' => 'datetime',
         'accepted_at' => 'datetime',
     ];
-
+    public function instance() { return $this->belongsTo(QuestionInstance::class, 'instance_id'); }
 }

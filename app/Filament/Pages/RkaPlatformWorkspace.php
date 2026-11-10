@@ -10,13 +10,14 @@ use App\Models\RkaPlatform\{
 };
 use App\Services\RkaPlatform\{
     TenantAccess, AuditTrail, ContributionService, QuestionRules,
-    SharedCostAllocator, JournalSpreadsheetImporter, BookPublishingService, FinancialApprovalService
+    SharedCostAllocator, JournalSpreadsheetImporter, BookPublishingService, FinancialApprovalService, EvidenceService
 };
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Livewire\WithFileUploads;
+use App\Models\RkaPlatform\EvidenceRecord;
 
 class RkaPlatformWorkspace extends Page
 {
@@ -56,6 +57,8 @@ class RkaPlatformWorkspace extends Page
     public string $questionEvidenceJson = '{}';
     public ?int $newQuestionId = null;
     public ?int $newOwnerUserId = null;
+    public ?int $newReviewerUserId = null;
+    public ?int $newUnitId = null;
     public string $questionContextJson = '{}';
     public ?int $inviteUserId = null;
     public int $inviteDays = 7;
@@ -80,6 +83,7 @@ class RkaPlatformWorkspace extends Page
     public string $journalSource = 'primary';
     public string $journalMappingJson = '{}';
     public $journalFile = null;
+    public $answerEvidenceFile = null;
 
     public function mount(): void
     {
@@ -116,7 +120,7 @@ class RkaPlatformWorkspace extends Page
     private function instance(): QuestionInstance
     {
         $instance = QuestionInstance::query()->where('organization_id', $this->orgId())
-            ->findOrFail($this->instanceId);
+            ->where('cycle_id', $this->cycleId)->findOrFail($this->instanceId);
         $this->access()->requireReadInstance($instance, (int)auth()->id());
         return $instance;
     }
@@ -124,7 +128,7 @@ class RkaPlatformWorkspace extends Page
     private function book(): Book
     {
         $book = Book::query()->where('organization_id', $this->orgId())
-            ->findOrFail($this->bookId);
+            ->where('cycle_id', $this->cycleId)->findOrFail($this->bookId);
         $this->access()->requireRole($book->organization_id, (int)auth()->id(),
             ['owner', 'admin', 'editor', 'reviewer', 'publisher']);
         return $book;
@@ -286,10 +290,18 @@ class RkaPlatformWorkspace extends Page
     public function createInstance(): void
     {
         $this->managers(); $cycle = $this->cycle();
-        $this->validate(['newQuestionId' => 'required|integer', 'newOwnerUserId' => 'required|integer']);
+        $this->validate([
+            'newQuestionId' => 'required|integer', 'newOwnerUserId' => 'required|integer',
+            'newReviewerUserId' => 'required|integer|different:newOwnerUserId',
+            'newUnitId' => 'nullable|integer',
+        ]);
         $question = Question::query()->where('organization_id', $this->orgId())
             ->where('active', true)->findOrFail($this->newQuestionId);
         $this->access()->membership($this->orgId(), $this->newOwnerUserId);
+        $this->access()->requireRole($this->orgId(), $this->newReviewerUserId, ['owner','admin','reviewer']);
+        if ($this->newUnitId !== null) {
+            Unit::query()->where('organization_id', $this->orgId())->findOrFail($this->newUnitId);
+        }
         try {
             $context = json_decode($this->questionContextJson, true, 512, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
@@ -301,6 +313,7 @@ class RkaPlatformWorkspace extends Page
         $instance = QuestionInstance::create([
             'organization_id' => $this->orgId(), 'cycle_id' => $cycle->id,
             'question_id' => $question->id, 'owner_user_id' => $this->newOwnerUserId,
+            'reviewer_user_id' => $this->newReviewerUserId, 'unit_id' => $this->newUnitId,
             'prompt_snapshot' => $question->prompt, 'rules_snapshot' => $question->rules,
         ]);
         $this->instanceId = $instance->id;
@@ -334,6 +347,33 @@ class RkaPlatformWorkspace extends Page
         $invite = Invitation::query()->where('organization_id', $this->orgId())->findOrFail($id);
         app(ContributionService::class)->accept($invite, (int)auth()->id());
         $this->notify('success', 'Undangan diterima.');
+    }
+
+    public function revokeInvite(int $id): void
+    {
+        $invite = $this->instance()->invitations()->findOrFail($id);
+        app(ContributionService::class)->revoke($invite, (int)auth()->id());
+        $this->notify('success', 'Undangan dicabut.');
+    }
+
+    public function uploadAnswerEvidence(): void
+    {
+        $instance = $this->instance();
+        $this->validate(['answerEvidenceFile' => 'required|file|mimes:pdf,docx,xlsx,jpg,jpeg,png|max:10240']);
+        $this->access()->requireAnswerInstance($instance, (int)auth()->id());
+        $answer = Answer::query()->where('instance_id', $instance->id)
+            ->where('author_id', auth()->id())->orderByDesc('revision')->firstOrFail();
+        app(EvidenceService::class)->upload($answer, (int)auth()->id(), $this->answerEvidenceFile);
+        $this->answerEvidenceFile = null;
+        $this->notify('success', 'Bukti disimpan secara privat untuk verifikasi.');
+    }
+
+    public function verifyEvidence(int $id): void
+    {
+        $evidence = EvidenceRecord::query()->where('organization_id', $this->orgId())
+            ->where('instance_id', $this->instance()->id)->findOrFail($id);
+        app(EvidenceService::class)->verify($evidence, (int)auth()->id());
+        $this->notify('success', 'Bukti diverifikasi.');
     }
 
     public function submitAnswer(): void
@@ -522,6 +562,7 @@ class RkaPlatformWorkspace extends Page
             'organizations' => $organizations,
             'canBootstrap' => auth()->user()->hasAnyRole(['superadmin','admin-keuangan']),
             'org' => null, 'isManager' => false, 'isFinance' => false,
+            'isInstanceOwner' => false, 'canAnswer' => false, 'canReview' => false, 'evidence' => collect(),
             'units' => collect(), 'users' => collect(), 'cycles' => collect(), 'questions' => collect(),
             'instances' => collect(), 'invitations' => collect(), 'answers' => collect(), 'syntheses' => collect(),
             'books' => collect(), 'bookSections' => collect(), 'templates' => collect(),
@@ -543,8 +584,9 @@ class RkaPlatformWorkspace extends Page
             $cycle = $this->cycle();
             $data['instances'] = QuestionInstance::where('organization_id', $orgId)->where('cycle_id', $cycle->id)
                 ->where(function ($query) use ($orgId) {
-                    if ($this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','editor','reviewer'])) return;
+                    if ($this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin'])) return;
                     $query->where('owner_user_id', auth()->id())
+                        ->orWhere('reviewer_user_id', auth()->id())
                         ->orWhereHas('invitations', fn ($q) => $q->where('invited_user_id', auth()->id())
                             ->whereIn('status', ['invited','accepted','completed'])->where('expires_at', '>', now()));
                 })->orderByDesc('id')->get();
@@ -563,12 +605,14 @@ class RkaPlatformWorkspace extends Page
         if ($this->instanceId) {
             $instance = $this->instance();
             $data['invitations'] = $instance->invitations()->where(function ($q) {
-                if ($this->access()->hasRole($this->orgId(), (int)auth()->id(), ['owner','admin','editor']) ||
+                if ($this->access()->hasRole($this->orgId(), (int)auth()->id(), ['owner','admin']) ||
                     $this->instance()->owner_user_id === (int)auth()->id()) return;
                 $q->where('invited_user_id', auth()->id());
             })->get();
-            $privileged = $instance->owner_user_id === (int) auth()->id() ||
-                $this->access()->hasRole($orgId, (int) auth()->id(), ['owner','admin','editor','reviewer']);
+            $data['isInstanceOwner'] = $instance->owner_user_id === (int)auth()->id();
+            $data['canAnswer'] = $this->access()->canAnswerInstance($instance, (int)auth()->id());
+            $data['canReview'] = $this->access()->canReviewInstance($instance, (int)auth()->id());
+            $privileged = $this->access()->canViewAnswers($instance, (int)auth()->id());
             $answerQuery = $instance->answers();
             if (!$privileged) $answerQuery->where('author_id', auth()->id());
             $data['answers'] = $answerQuery->orderBy('author_id')->orderByDesc('revision')->get()
@@ -576,6 +620,10 @@ class RkaPlatformWorkspace extends Page
             $synthesisQuery = $instance->syntheses();
             if (!$privileged) $synthesisQuery->where('status', 'verified');
             $data['syntheses'] = $synthesisQuery->orderByDesc('version')->get();
+            $evidenceQuery = EvidenceRecord::query()->where('organization_id', $orgId)
+                ->where('instance_id', $instance->id);
+            if (!$privileged) $evidenceQuery->where('uploaded_by', auth()->id());
+            $data['evidence'] = $evidenceQuery->orderByDesc('id')->get();
         }
         if ($this->bookId) {
             $data['bookSections'] = $this->book()->sections()->get();
