@@ -858,6 +858,7 @@ class RkaPlatformWorkspace extends Page
         $data['isManager'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin']);
         $data['isFinance'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','finance']);
         $data['canControlClose'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','finance','publisher']);
+        $myWorkflowRoles = $this->access()->membership($orgId, (int)auth()->id())->roles ?? [];
         $data['canRaiseDispute'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','finance','unit_manager','contributor']);
         $data['canEditBook'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','editor']);
         $data['canApproveBookSection'] = $this->access()->hasRole($orgId, (int)auth()->id(), ['owner','admin','reviewer']);
@@ -897,10 +898,26 @@ class RkaPlatformWorkspace extends Page
                 $data['closingPolicies'] = ApprovalPolicy::where('organization_id', $orgId)
                     ->whereIn('action', ['cycle.close','cycle.reopen'])->latest()->limit(12)->get();
             }
+            $eligibleApprovals = ApprovalRequest::where('organization_id', $orgId)
+                ->where('subject_type', 'cycle')->where('subject_id', $cycle->id)
+                ->where('status','pending')->get()->filter(function ($approval) use ($myWorkflowRoles) {
+                    $required = $approval->steps_snapshot['steps'][$approval->current_step]['roles'] ?? [];
+                    return $approval->requested_by !== (int)auth()->id() &&
+                        count(array_intersect($required, $myWorkflowRoles)) > 0 &&
+                        !$approval->decisions()->where('actor_id',auth()->id())->exists();
+                });
+            $data['canControlClose'] = $data['canControlClose'] || $eligibleApprovals->isNotEmpty();
             if ($data['canControlClose']) {
                 $data['cycleApprovals'] = ApprovalRequest::where('organization_id', $orgId)
                     ->where('subject_type','cycle')->where('subject_id',$cycle->id)
-                    ->latest()->limit(15)->get();
+                    ->latest()->limit(15)->get()->map(function ($approval) use ($myWorkflowRoles) {
+                        $required = $approval->steps_snapshot['steps'][$approval->current_step]['roles'] ?? [];
+                        $approval->can_decide = $approval->status === 'pending' &&
+                            $approval->requested_by !== (int)auth()->id() &&
+                            count(array_intersect($required, $myWorkflowRoles)) > 0 &&
+                            !$approval->decisions()->where('actor_id', auth()->id())->exists();
+                        return $approval;
+                    });
                 $data['cycleClosings'] = DB::table('rka_cycle_closings')
                     ->where('organization_id',$orgId)->where('cycle_id',$cycle->id)
                     ->orderByDesc('version')->limit(5)->get();
