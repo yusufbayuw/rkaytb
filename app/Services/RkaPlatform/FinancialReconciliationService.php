@@ -28,7 +28,8 @@ class FinancialReconciliationService
     }
 
     public function createMapping(Cycle $cycle, int $actor, string $source, string $account,
-        string $classification, ?int $unitId = null, ?string $from = null, ?string $until = null): int
+        string $classification, ?int $unitId = null, ?string $from = null, ?string $until = null,
+        ?string $category = null): int
     {
         $this->access->requireRole($cycle->organization_id, $actor, ['owner','admin','finance']);
         $this->assertMutable($cycle);
@@ -43,10 +44,13 @@ class FinancialReconciliationService
             $until > $cycle->ends_on->format('Y-m-d') || $from > $until) {
             throw ValidationException::withMessages(['mapping' => 'Tanggal mapping harus berada pada periode siklus.']);
         }
+        if ($category !== null && (!preg_match('/^[a-zA-Z0-9_.-]{1,80}$/', $category))) {
+            throw ValidationException::withMessages(['mapping' => 'Kategori akuntansi hanya dapat berisi kode organisasi yang valid.']);
+        }
         if ($unitId !== null && !Unit::where('organization_id', $cycle->organization_id)->whereKey($unitId)->exists()) {
             throw ValidationException::withMessages(['mapping' => 'Unit mapping tidak termasuk organisasi.']);
         }
-        return DB::transaction(function () use ($cycle, $actor, $source, $account, $classification, $unitId, $from, $until) {
+        return DB::transaction(function () use ($cycle, $actor, $source, $account, $classification, $unitId, $from, $until, $category) {
             $locked = Cycle::whereKey($cycle->id)->lockForUpdate()->firstOrFail();
             $this->assertMutable($locked);
             $conflict = DB::table('rka_journal_account_mappings')
@@ -58,7 +62,7 @@ class FinancialReconciliationService
             $id = DB::table('rka_journal_account_mappings')->insertGetId([
                 'organization_id' => $cycle->organization_id, 'cycle_id' => $cycle->id,
                 'source' => $source, 'account_code' => $account, 'classification' => $classification,
-                'unit_id' => $unitId, 'valid_from' => $from, 'valid_to' => $until,
+                'category' => $category, 'unit_id' => $unitId, 'valid_from' => $from, 'valid_to' => $until,
                 'created_by' => $actor, 'active' => false, 'created_at' => now(), 'updated_at' => now(),
             ]);
             $this->audit->record($cycle->organization_id, $actor, 'journal_mapping.drafted', 'journal_mapping', $id);
@@ -137,6 +141,11 @@ class FinancialReconciliationService
         $pools = SharedPool::where('organization_id', $org)->where('cycle_id', $cycle->id)->orderBy('id')->get();
         $disputes = DB::table('rka_sharing_disputes')->where('organization_id', $org)
             ->where('cycle_id', $cycle->id)->orderBy('id')->get();
+        $materialityPolicies = DB::table('rka_materiality_policies')->where('organization_id', $org)
+            ->where('cycle_id', $cycle->id)->orderBy('id')->get();
+        $exceptions = DB::table('rka_close_exceptions')->where('organization_id', $org)
+            ->where('cycle_id', $cycle->id)->orderBy('id')->get();
+        $activeMateriality = $materialityPolicies->firstWhere('status', 'active');
         $units = Unit::where('organization_id', $org)->orderBy('id')->get();
         $profile = ($cycle->settings ?? [])['kpi_profile'] ?? null;
         $sourceHash = hash('sha256', json_encode([
@@ -144,6 +153,7 @@ class FinancialReconciliationService
             'journal' => $journal->toArray(), 'batches' => $batches->toArray(),
             'mappings' => $maps->toArray(), 'budgets' => $budgets->toArray(),
             'pools' => $pools->toArray(), 'disputes' => $disputes->toArray(),
+            'materiality_policies' => $materialityPolicies->toArray(), 'exceptions' => $exceptions->toArray(),
             'units' => $units->toArray(),
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
 
@@ -160,7 +170,8 @@ class FinancialReconciliationService
         }
         $perUnit['unassigned'] = $this->emptyUnit('Tanpa unit');
         $groupBalances = []; $internal = []; $clearing = [];
-        $grossIncome = 0; $grossExpense = 0; $internalIncome = 0; $internalExpense = 0; $postedCount = 0;
+        $grossIncome = 0; $grossExpense = 0; $internalIncome = 0; $internalExpense = 0;
+        $excludedActualIncome = 0; $postedCount = 0;
 
         foreach ($journal as $line) {
             if ($line->posting_status !== 'posted') continue;
@@ -203,13 +214,18 @@ class FinancialReconciliationService
             if ($type === 'non_pnl') continue;
             $value = in_array($type, ['income','internal_income'], true) ? $credit - $debit : $debit - $credit;
             $perUnit[$key][$type] += $value;
+            if ($type === 'income' && is_array($profile) &&
+                in_array($map->category, $profile['excluded_income_categories'] ?? [], true)) {
+                $perUnit[$key]['actual_excluded_income'] += $value;
+                $excludedActualIncome += $value;
+            }
             if (str_contains($type, 'income')) $grossIncome += $value;
             else $grossExpense += $value;
             if (str_starts_with($type, 'internal_')) {
                 if (!$line->related_reference) {
                     $block('UNREFERENCED_INTERNAL_TRANSFER', (string)$line->id);
                 } else {
-                    $ref = $line->related_reference;
+                    $ref = $line->source.'|'.$line->related_reference;
                     $internal[$ref] ??= ['internal_income' => 0, 'internal_expense' => 0];
                     $internal[$ref][$type] += $value;
                 }
@@ -247,6 +263,8 @@ class FinancialReconciliationService
             }
         }
         $budgetCount = 0;
+        $approvedBudgetMinor = 0;
+        $usedExceptionMinor = 0;
         foreach ($budgets as $budget) {
             if ($budget->status !== 'approved') { $block('UNAPPROVED_BUDGET', (string)$budget->id); continue; }
             $budgetCount++;
@@ -254,13 +272,34 @@ class FinancialReconciliationService
             if (!isset($perUnit[$key])) { $block('UNKNOWN_BUDGET_UNIT', (string)$budget->id); continue; }
             if (!$profileValid) continue;
             $amount = $money($budget->amount);
+            $approvedBudgetMinor += $amount;
             if (in_array($budget->category, $profile['income_categories'], true)) {
                 $perUnit[$key]['plan_income'] += $amount;
+                if (in_array($budget->category, $profile['excluded_income_categories'] ?? [], true)) {
+                    $perUnit[$key]['plan_excluded_income'] += $amount;
+                }
             } elseif (in_array($budget->category, $profile['expense_categories'], true)) {
                 $perUnit[$key]['plan_expense'] += $amount;
             } else {
-                $block('UNMAPPED_BUDGET_CATEGORY', $budget->category.'|'.$budget->id);
+                $approved = $exceptions->first(fn ($e) => $e->budget_line_id === $budget->id &&
+                    $e->code === 'UNMAPPED_BUDGET_CATEGORY' && $e->status === 'approved' &&
+                    $activeMateriality && (int)$e->policy_id === (int)$activeMateriality->id &&
+                    (int)$e->amount_minor === $amount && $e->approved_by !== $e->requested_by);
+                if ($approved) {
+                    $usedExceptionMinor += $amount;
+                    $warnings[] = ['code' => 'APPROVED_UNMAPPED_BUDGET_EXCEPTION',
+                        'reference' => (string)$budget->id, 'excluded_minor' => $amount];
+                } else {
+                    $block('UNMAPPED_BUDGET_CATEGORY', $budget->category.'|'.$budget->id);
+                }
             }
+        }
+        if ($usedExceptionMinor > 0 && $activeMateriality) {
+            $pct = (int)$activeMateriality->percentage_bps;
+            $percentageLimit = intdiv($approvedBudgetMinor, 10000) * $pct +
+                intdiv(($approvedBudgetMinor % 10000) * $pct, 10000);
+            $limit = min((int)$activeMateriality->absolute_minor, $percentageLimit);
+            if ($usedExceptionMinor > $limit) $block('EXCEPTION_AGGREGATE_EXCEEDS_POLICY');
         }
         if (!$budgetCount) $block('NO_APPROVED_BUDGET');
         foreach ($pools as $pool) {
@@ -287,8 +326,12 @@ class FinancialReconciliationService
             $row['actual_surplus'] = $row['income'] + $row['internal_income']
                 - $row['expense'] - $row['internal_expense'];
             $row['variance'] = $row['actual_surplus'] - $row['plan_surplus'];
+            $row['plan_surplus_without_excluded_income'] = $row['plan_surplus'] - $row['plan_excluded_income'];
+            $row['actual_surplus_without_excluded_income'] = $row['actual_surplus'] - $row['actual_excluded_income'];
             foreach (['plan_income','plan_expense','plan_sharing','plan_surplus','actual_surplus',
-                'variance','income','expense','internal_income','internal_expense'] as $field) {
+                'variance','income','expense','internal_income','internal_expense',
+                'plan_excluded_income','actual_excluded_income',
+                'plan_surplus_without_excluded_income','actual_surplus_without_excluded_income'] as $field) {
                 $row[$field] = $fmt($row[$field]);
             }
         }
@@ -305,6 +348,8 @@ class FinancialReconciliationService
                 'mappings_count' => $maps->where('active', true)->count(),
                 'blocker_count' => count($errors), 'blockers' => array_slice($errors, 0, 300),
                 'warnings' => $warnings,
+                'approved_exception_count' => count($warnings),
+                'excluded_budget_minor' => $usedExceptionMinor,
                 'unit_managerial' => array_values($perUnit),
                 'consolidated' => [
                     'gross_income' => $fmt($grossIncome),
@@ -314,6 +359,8 @@ class FinancialReconciliationService
                     'income' => $fmt($consolidatedIncome),
                     'expense' => $fmt($consolidatedExpense),
                     'surplus' => $fmt($consolidatedIncome - $consolidatedExpense),
+                    'excluded_external_income' => $fmt($excludedActualIncome),
+                    'surplus_without_excluded_income' => $fmt($consolidatedIncome - $consolidatedExpense - $excludedActualIncome),
                     'internal_income_before_elimination' => $fmt($internalIncome),
                     'internal_expense_before_elimination' => $fmt($internalExpense),
                 ],
@@ -327,6 +374,7 @@ class FinancialReconciliationService
     {
         return ['unit' => $name,
             'plan_income' => 0, 'plan_expense' => 0, 'plan_sharing' => 0,
+            'plan_excluded_income' => 0, 'actual_excluded_income' => 0,
             'income' => 0, 'expense' => 0, 'internal_income' => 0, 'internal_expense' => 0,
         ];
     }
