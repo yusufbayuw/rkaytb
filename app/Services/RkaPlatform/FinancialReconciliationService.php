@@ -215,7 +215,8 @@ class FinancialReconciliationService
             $value = in_array($type, ['income','internal_income'], true) ? $credit - $debit : $debit - $credit;
             $perUnit[$key][$type] += $value;
             if ($type === 'income' && is_array($profile) &&
-                in_array($map->category, $profile['excluded_income_categories'] ?? [], true)) {
+                is_array($profile['excluded_income_categories'] ?? null) &&
+                in_array($map->category, $profile['excluded_income_categories'], true)) {
                 $perUnit[$key]['actual_excluded_income'] += $value;
                 $excludedActualIncome += $value;
             }
@@ -281,7 +282,7 @@ class FinancialReconciliationService
             } elseif (in_array($budget->category, $profile['expense_categories'], true)) {
                 $perUnit[$key]['plan_expense'] += $amount;
             } else {
-                $approved = $exceptions->first(fn ($e) => $e->budget_line_id === $budget->id &&
+                $approved = $exceptions->first(fn ($e) => (int)$e->budget_line_id === (int)$budget->id &&
                     $e->code === 'UNMAPPED_BUDGET_CATEGORY' && $e->status === 'approved' &&
                     $activeMateriality && (int)$e->policy_id === (int)$activeMateriality->id &&
                     (int)$e->amount_minor === $amount && $e->approved_by !== $e->requested_by);
