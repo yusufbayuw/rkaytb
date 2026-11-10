@@ -337,6 +337,9 @@ class RkaPlatformWorkspace extends Page
         $cycle = Cycle::create([
             'organization_id' => $this->orgId(), 'name' => $this->cycleName, 'year' => $this->cycleYear,
             'starts_on' => $this->cycleStart, 'ends_on' => $this->cycleEnd,
+            // New cycles require explicit consent from every affected cost-sharing unit.
+            // Historic cycles without this policy keep their existing approval contract.
+            'settings' => ['sharing_unit_approval_policy' => 'required'],
         ]);
         $this->cycleId = $cycle->id;
         $this->loadKpiProfile();
@@ -559,6 +562,15 @@ class RkaPlatformWorkspace extends Page
             ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
         app(FinancialApprovalService::class)->approvePool($pool, (int)auth()->id());
         $this->notify('success', 'Alokasi disetujui.');
+    }
+
+    public function consentSharedPool(int $id): void
+    {
+        $pool = SharedPool::query()->where('organization_id', $this->orgId())
+            ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
+        app(\App\Services\RkaPlatform\SharedPoolUnitConsentService::class)
+            ->sign($pool, (int)auth()->id());
+        $this->notify('success', 'Persetujuan unit untuk versi alokasi ini tercatat.');
     }
 
     public function importJournal(): void
@@ -864,6 +876,7 @@ class RkaPlatformWorkspace extends Page
             'accountMappings' => collect(), 'reconRuns' => collect(),
             'closingPolicies' => collect(), 'cycleApprovals' => collect(),
             'cycleClosings' => collect(), 'sharingDisputes' => collect(), 'disputePools' => collect(),
+            'unitConsentPools' => collect(), 'signedPoolIds' => [], 'requiresUnitConsent' => false,
             'canControlClose' => false, 'canRaiseDispute' => false, 'cycleCurrent' => null,
             'materialityPolicies' => collect(), 'materialityExceptions' => collect(),
             'unmappedBudgetLines' => collect(),
@@ -897,6 +910,24 @@ class RkaPlatformWorkspace extends Page
         if ($this->cycleId) {
             $cycle = $this->cycle();
             $data['cycleCurrent'] = $cycle;
+            $consentSvc = app(\App\Services\RkaPlatform\SharedPoolUnitConsentService::class);
+            $data['requiresUnitConsent'] = $consentSvc->isRequired($cycle);
+            $membership = $this->access()->membership($orgId, (int)auth()->id());
+            if ($data['requiresUnitConsent'] && in_array('unit_manager', $membership->roles ?? [], true)
+                && $membership->unit_id !== null) {
+                $unitId = (int)$membership->unit_id;
+                $data['unitConsentPools'] = SharedPool::where('organization_id', $orgId)
+                    ->where('cycle_id', $cycle->id)->orderBy('id')->get()
+                    ->filter(fn ($pool) => array_key_exists((string)$unitId, $pool->allocations ?? [])
+                        && (float)($pool->allocations[$unitId] ?? 0) > 0)->values();
+                $data['signedPoolIds'] = DB::table('rka_shared_pool_unit_consents')
+                    ->where('organization_id', $orgId)->where('cycle_id', $cycle->id)
+                    ->where('unit_id', $unitId)->get()->filter(function ($signature) use ($consentSvc, $data) {
+                        $pool = $data['unitConsentPools']->firstWhere('id', $signature->pool_id);
+                        return $pool && $signature->pool_version === $pool->version &&
+                            $signature->allocation_hash === $consentSvc->allocationHash($pool);
+                    })->pluck('pool_id')->all();
+            }
             if ($data['isFinance']) {
                 $data['accountMappings'] = DB::table('rka_journal_account_mappings')
                     ->where('organization_id', $orgId)->where('cycle_id',$cycle->id)
