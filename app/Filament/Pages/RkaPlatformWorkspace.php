@@ -98,6 +98,7 @@ class RkaPlatformWorkspace extends Page
     public string $policyRisk = 'normal';
     public string $policyStepsJson = '[]';
     public string $cycleApprovalReason = '';
+    public string $approvalDecisionReason = '';
     public ?int $disputePoolId = null;
     public ?int $disputeUnitId = null;
     public string $disputeReason = '';
@@ -639,9 +640,11 @@ class RkaPlatformWorkspace extends Page
     {
         $req = ApprovalRequest::where('organization_id',$this->orgId())
             ->where('subject_type','cycle')->where('subject_id',$this->cycle()->id)->findOrFail($id);
+        if (!$approve) $this->validate(['approvalDecisionReason' => 'required|string|min:10|max:2000']);
         app(FinancialClosingService::class)->decide(
-            $req, (int)auth()->id(), $approve, $approve ? '' : 'Ditolak setelah peninjauan data dan bukti sumber.'
+            $req, (int)auth()->id(), $approve, $approve ? '' : $this->approvalDecisionReason
         );
+        $this->approvalDecisionReason = '';
         $this->notify('success', 'Keputusan persetujuan dicatat.');
     }
 
@@ -765,7 +768,7 @@ class RkaPlatformWorkspace extends Page
             'kpiPreview' => null,
             'accountMappings' => collect(), 'reconRuns' => collect(),
             'closingPolicies' => collect(), 'cycleApprovals' => collect(),
-            'cycleClosings' => collect(), 'sharingDisputes' => collect(),
+            'cycleClosings' => collect(), 'sharingDisputes' => collect(), 'disputePools' => collect(),
             'canControlClose' => false, 'canRaiseDispute' => false, 'cycleCurrent' => null,
             'units' => collect(), 'users' => collect(), 'cycles' => collect(), 'questions' => collect(),
             'instances' => collect(), 'invitations' => collect(), 'answers' => collect(), 'syntheses' => collect(),
@@ -819,6 +822,8 @@ class RkaPlatformWorkspace extends Page
                     ->orderByDesc('version')->limit(5)->get();
             }
             if ($data['canRaiseDispute']) {
+                $data['disputePools'] = SharedPool::where('organization_id',$orgId)
+                    ->where('cycle_id',$cycle->id)->orderBy('name')->get(['id','name']);
                 $disputeQuery = DB::table('rka_sharing_disputes')
                     ->where('organization_id',$orgId)->where('cycle_id',$cycle->id);
                 if (!$data['isFinance']) {
