@@ -11,7 +11,7 @@ use App\Models\RkaPlatform\{
 use App\Services\RkaPlatform\{
     TenantAccess, AuditTrail, ContributionService, QuestionRules,
     SharedCostAllocator, JournalSpreadsheetImporter, BookPublishingService, FinancialApprovalService,
-    EvidenceService, FinancialReconciliationService, FinancialClosingService
+    EvidenceService, FinancialReconciliationService, FinancialClosingService, MaterialityExceptionService
 };
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
@@ -93,6 +93,7 @@ class RkaPlatformWorkspace extends Page
     public string $mappingSource = 'primary';
     public string $mappingAccount = '';
     public string $mappingClass = 'expense';
+    public string $mappingCategory = '';
     public ?int $mappingUnitId = null;
     public string $policyAction = 'cycle.close';
     public string $policyRisk = 'normal';
@@ -103,6 +104,10 @@ class RkaPlatformWorkspace extends Page
     public ?int $disputeUnitId = null;
     public string $disputeReason = '';
     public string $disputeResolution = '';
+    public string $materialityAmount = '';
+    public string $materialityBasisPoints = '';
+    public ?int $exceptionBudgetId = null;
+    public string $exceptionReason = '';
 
     public function mount(): void
     {
@@ -563,10 +568,12 @@ class RkaPlatformWorkspace extends Page
             'mappingAccount' => 'required|string|max:255',
             'mappingClass' => 'required|in:income,expense,internal_income,internal_expense,clearing,non_pnl',
             'mappingUnitId' => 'nullable|integer',
+            'mappingCategory' => 'nullable|string|max:80',
         ]);
         app(FinancialReconciliationService::class)->createMapping(
             $this->cycle(), (int)auth()->id(), $this->mappingSource, $this->mappingAccount,
-            $this->mappingClass, $this->mappingUnitId
+            $this->mappingClass, $this->mappingUnitId, null, null,
+            trim($this->mappingCategory) ?: null
         );
         $this->mappingAccount = '';
         $this->notify('success', 'Mapping tersimpan sebagai draft dan menunggu reviewer independen.');
@@ -670,6 +677,42 @@ class RkaPlatformWorkspace extends Page
         );
         $this->disputeResolution = '';
         $this->notify('success', 'Resolusi sengketa tercatat untuk audit.');
+    }
+
+    public function proposeMaterialityPolicy(): void
+    {
+        $this->validate([
+            'materialityAmount' => 'required|numeric|gt:0',
+            'materialityBasisPoints' => 'required|integer|min:1|max:10000',
+        ]);
+        app(MaterialityExceptionService::class)->propose(
+            $this->cycle(), (int)auth()->id(), $this->materialityAmount, (int)$this->materialityBasisPoints
+        );
+        $this->notify('success', 'Kebijakan materialitas dibuat sebagai draft. Minta aktivasi independen.');
+    }
+
+    public function activateMaterialityPolicy(int $id): void
+    {
+        app(MaterialityExceptionService::class)->activate($this->cycle(), $id, (int)auth()->id());
+        $this->notify('success', 'Batas materialitas disahkan.');
+    }
+
+    public function requestMaterialityException(): void
+    {
+        $this->validate([
+            'exceptionBudgetId' => 'required|integer', 'exceptionReason' => 'required|string|min:10|max:2000',
+        ]);
+        app(MaterialityExceptionService::class)->request(
+            $this->cycle(), $this->exceptionBudgetId, (int)auth()->id(), $this->exceptionReason
+        );
+        $this->exceptionReason = '';
+        $this->notify('success', 'Pengecualian administratif menunggu persetujuan.');
+    }
+
+    public function approveMaterialityException(int $id): void
+    {
+        app(MaterialityExceptionService::class)->approve($this->cycle(), $id, (int)auth()->id());
+        $this->notify('success', 'Pengecualian tercatat dan dibatasi kebijakan materialitas.');
     }
 
     public function createTemplate(): void
@@ -782,6 +825,8 @@ class RkaPlatformWorkspace extends Page
             'closingPolicies' => collect(), 'cycleApprovals' => collect(),
             'cycleClosings' => collect(), 'sharingDisputes' => collect(), 'disputePools' => collect(),
             'canControlClose' => false, 'canRaiseDispute' => false, 'cycleCurrent' => null,
+            'materialityPolicies' => collect(), 'materialityExceptions' => collect(),
+            'unmappedBudgetLines' => collect(),
             'units' => collect(), 'users' => collect(), 'cycles' => collect(), 'questions' => collect(),
             'instances' => collect(), 'invitations' => collect(), 'answers' => collect(), 'syntheses' => collect(),
             'books' => collect(), 'bookSections' => collect(), 'templates' => collect(),
@@ -814,6 +859,17 @@ class RkaPlatformWorkspace extends Page
                 $data['accountMappings'] = DB::table('rka_journal_account_mappings')
                     ->where('organization_id', $orgId)->where('cycle_id',$cycle->id)
                     ->orderByDesc('id')->limit(30)->get();
+                $data['materialityPolicies'] = DB::table('rka_materiality_policies')
+                    ->where('organization_id',$orgId)->where('cycle_id',$cycle->id)
+                    ->orderByDesc('version')->limit(10)->get();
+                $data['materialityExceptions'] = DB::table('rka_close_exceptions')
+                    ->where('organization_id',$orgId)->where('cycle_id',$cycle->id)
+                    ->orderByDesc('id')->limit(30)->get();
+                $profile = ($cycle->settings ?? [])['kpi_profile'] ?? [];
+                $knownCategories = array_merge($profile['income_categories'] ?? [], $profile['expense_categories'] ?? []);
+                $data['unmappedBudgetLines'] = BudgetLine::where('organization_id',$orgId)
+                    ->where('cycle_id',$cycle->id)->where('status','approved')
+                    ->whereNotIn('category', $knownCategories)->orderBy('id')->limit(50)->get();
                 $data['reconRuns'] = DB::table('rka_reconciliation_runs')
                     ->where('organization_id', $orgId)->where('cycle_id',$cycle->id)
                     ->orderByDesc('version')->limit(8)->get()->map(function ($run) {
