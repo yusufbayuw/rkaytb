@@ -43,12 +43,12 @@ jobs:
         run: |
           cp .env.example .env
           php artisan key:generate --force
-      - name: Test white-label platform
+      - name: Test full suite including legacy smoke tests
         env:
           APP_ENV: testing
           DB_CONNECTION: sqlite
           DB_DATABASE: ':memory:'
-        run: php artisan test --filter=RkaPlatform
+        run: php artisan test
       - name: Check Filament Blade views
         run: php artisan view:cache
       - name: Check routes
@@ -81,7 +81,7 @@ jobs:
         run: |
           cp .env.example .env
           php artisan key:generate --force
-      - name: Test migrations and RKA regression
+      - name: Test migrations and full regression suite
         env:
           APP_ENV: testing
           DB_CONNECTION: mysql
@@ -92,4 +92,4 @@ jobs:
           DB_PASSWORD: test-password
           CACHE_DRIVER: array
           SESSION_DRIVER: array
-        run: php artisan test --filter=RkaPlatform
+        run: php artisan test
