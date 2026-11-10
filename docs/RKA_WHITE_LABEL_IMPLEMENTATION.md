@@ -1,63 +1,71 @@
-# RKA White-Label Platform — Implementation, Safety Gates and Rollout
+# RKA White-Label Platform — Implementasi, Pengujian, dan Kebijakan Rilis
 
-## Product contract
+## Prinsip mutlak
 
-The uploaded ADM RKA XLSX and 2027 RKA PDF are **example documents only**, not organization or accounting defaults. The application must never seed example organizations, fixed schools/departments, institution-specific unit names, job titles, account codes, cost-sharing percentages, academic categories, question banks or book chapters.
+- Dua dokumen RKA yang diunggah pengguna adalah **template referensi format**, bukan acuan organisasi, unit, jabatan, COA, ketentuan anggaran, maupun data master. Tidak ada seeder nama sekolah, unit, program, akun, persentase alokasi, judul bab atau pertanyaan dari contoh.
+- Fitur baru berada dalam namespace tabel **rka_*** dan dirancang secara additive. Tabel, histori serta resource Filament RKA existing tetap dipertahankan. Belum ada konversi otomatis data legacy menjadi angka resmi.
+- **Sistem pembukuan asal tetap menjadi otoritas realisasi.** Impor jurnal ke rkaytb adalah salinan untuk rekonsiliasi, bukan pembuatan atau pembaruan transaksi akuntansi.
+- Akses dibatasi oleh keanggotaan organisasi aktif, siklus, unit, tugas, dan peran. Role global Spatie tidak otomatis memberi akses ke organisasi lain.
 
-This branch adds a **new namespace of \`rka_*\` database tables**. Legacy tables and Filament Resources remain untouched. Legacy records are not migrated or copied automatically.
+## Inventaris fitur yang telah diimplementasikan
 
-## Implemented and tested vertical slices
+| Modul | Kemampuan | Batasan penting |
+|---|---|---|
+| Organisasi | Identitas, warna, mata uang, locale, zona waktu, unit, keanggotaan, role standar dan role approval khusus organisasi | Logo dan identitas dokumen lanjutan belum lengkap |
+| Budget | Draft budget → pemeriksa independen; penambahan/persetujuan ditolak setelah periode closed | Revisi dan pembandingan versi budget belum berupa modul lengkap |
+| Sharing Budget | Cost pool equal/weighted, pembulatan minor unit, validasi penerima, persetujuan independen, sengketa dan resolusi | Driver lain seperti headcount, area, lisensi, usage belum diimplementasikan |
+| Jurnal XLSX | Mapping header, staging, idempotensi hash file dan source line ID, pemeriksaan format dan peringatan balance | Tidak mem-post jurnal asli; konektor API belum ada |
+| COA Mapping | Aturan per sumber, akun, tanggal efektif, unit default, klasifikasi P&L/internal/clearing dan kategori pendapatan, maker-checker | Multi-entity dan jurnal koreksi/reversal kompleks belum seluruhnya dicakup |
+| Rekonsiliasi | Sumber verified, saldo jurnal, klasifikasi akun, clearing, internal transfer dipasangkan berdasar source/reference; blocker, snapshot dan SHA | Kesalahan struktural tidak dapat diberi pengecualian |
+| KPI Budget | Per unit dan konsolidasi, budget vs actual, surplus dan deviasi, dengan/tanpa kategori pendapatan khusus sesuai profil organisasi, kebijakan sharing yang sudah/ belum termasuk biaya | Forecast, multi-year comparison dan skenario multi-entity belum lengkap |
+| Materialitas | Batas **nominal dan persentase secara bersamaan**; policy dan pengecualian maker-checker; total pengecualian tidak bisa melampaui limit | Hanya kategori budget approved yang belum termapping, bukan exception jurnal |
+| Approval | 2–5 tingkat, berdasarkan role organisasi dan risiko, snapshot policy, pemohon dan approver di setiap tingkat berbeda | SLA eskalasi, delegasi sementara, persetujuan unit terdampak yang lebih kompleks belum lengkap |
+| Closing | Rekonsiliasi verified versi terbaru dengan nol blocker, multi-step approval, snapshot immutable, hash sumber, reopen berjenjang | Pembukuan koreksi tetap dilakukan pada sistem sumber |
+| Narasi | Bank pertanyaan, penugasan reviewer per pertanyaan, undangan, kontribusi versi, sintesis, konflik, evidence privat/verified | Kontrol kualitas semantik dan virus scan belum lengkap |
+| Buku RKA | Template judul sendiri, blok NARASI/KONSOLIDASI/KPI/SHARING/REKONSILIASI, editor/reviewer, snapshot angka hanya dari closing sah | Drag-and-drop, daftar isi otomatis, styling profesional kompleks belum lengkap |
+| Ekspor | DOCX/PDF/XLSX dari snapshot identik, tabel konsolidasi, KPI per unit, Sharing Budget, rekonsiliasi dan grafik | QA visual dokumen panjang masih diperlukan |
+| RKA existing | **Preview baca-saja oleh superadmin**, tanpa mengubah/menyalin nilai historis | Mapping legacy-ID, periode, parent-child dan nominal teks harus divalidasi sebelum integrasi |
 
-- Organization memberships, branding name/color/currency/locale/time zone, configurable units and annual cycles.
-- Draft budget lines; independent reviewer approval and audit events.
-- Equal / weighted shared-cost allocations; integer minor-unit rounding, recipient organization validation, independent approval. These are managerial plans, **not journal postings**.
-- Versioned question definitions with a restricted rule DSL; question assignments include unit, question owner and **explicit independent reviewer**.
-- Internal invitations, acceptance, cancellation/revocation, time-limited permissions, multiple answer revisions with optimistic revision checks.
-- Scoped question listing and detail access: general editors/reviewers cannot enumerate all question content based on role alone.
-- Private supporting-evidence upload and download, named independent review and verified-evidence requirement for evidence-bound synthesis; files are not public.
-- XLSX import to **staging only** with configurable header mapping, file-hash idempotency, source/line overlap rejection, per-journal balance warnings and row validation. No financial actuals are posted from imports.
-- Book sections, independent editorial review and export service skeleton. **Official publication is OFF by default** under \`RKA_ENABLE_OFFICIAL_PUBLICATION=false\`; do not enable until journal reconciliation, KPI Budget and closing are implemented and approved.
-- Explicit superadmin-only **read-only legacy budget preview**, segregated from the new platform. It does not infer the historic budget year, copy records or automatically include their values in KPI calculations.
-- Organization-configured **KPI Budget preview before Sharing Budget** based on approved budget-line categories. It excludes unapproved budgets, shared cost, reconciled actuals and eliminations; it is explicitly labeled NONFINAL.
-- Replacement internal profile page after removing unavailable third-party \`ryangjchandler/filament-profile\` dependency; functionality includes name/email and password update.
-- Automated SQLite/CI tests for access, financial approval, answer revisions, evidence, import staging, book-publication gates, allocation and preliminary KPI. A MySQL 8 CI matrix job is also configured.
+## Aturan perhitungan dan kontrol data
 
-## Safe first-run checklist
+1. Rencana menggunakan hanya baris anggaran dan alokasi approved pada organisasi/siklus.
+2. Realisasi menggunakan baris jurnal berstatus posted dari batch impor verified; approval batch terpisah dari posting pembukuan.
+3. Setiap baris yang diperlukan harus mempunyai tepat satu mapping akun aktif pada sumber dan tanggal terkait. Mapping ambigu atau kosong memblokir rekonsiliasi.
+4. Debit dan kredit harus seimbang dalam satu sumber, nomor jurnal, dan tanggal. Akun clearing terbuka dan reversal tanpa referensi valid adalah blocker.
+5. Dalam tampilan **unit manajerial**, biaya dan pendapatan internal tetap muncul sebagai charge yang dibukukan. Pada **konsolidasi organisasi**, pasangan internal income/internal expense dengan sumber dan reference sama serta jumlah identik dieliminasi satu kali. Reclassification biasa tidak dieliminasi kembali.
+6. Kategori pendapatan/biaya, inclusion of Sharing Budget, dan jenis pendapatan khusus diatur **per profil organisasi**, tanpa kode sekolah atau Dana Pembangunan yang di-hardcode.
+7. Materialitas tidak menghapus/mengabaikan jurnal, clearing, duplicate, atau eliminasi yang bermasalah. Pengecualian administratif yang diizinkan hanya unmapped budget category yang disahkan oleh pihak berbeda, ditelusuri per budget line, dan diperiksa limit absolut sekaligus basis poin kumulatif.
+8. Selisih antara realisasi dan anggaran adalah deviasi manajerial, bukan otomatis error rekonsiliasi. Kecacatan sumber berbeda dari varians anggaran.
+9. Closing mensyaratkan snapshot rekonsiliasi **terbaru**, disahkan independen, masih cocok dengan source hash, dan tanpa blocker. Persetujuan closing berjenjang disimpan sebagai jejak audit. Reopen tidak menimpa snapshot lama.
+10. Penerbitan Buku RKA resmi mensyaratkan closed cycle dan hash laporan/sumber yang masih cocok; semua teks/review harus lengkap. Ekspor menggunakan snapshot yang sudah diterbitkan, tidak menghitung ulang data hidup.
 
-1. Back up the database before staging migrations. Never run \`migrate:fresh\` against production.
-2. Install packages using the committed lock file, then run \`php artisan migrate --force\` **only in a controlled staging environment** after checking migrations and privileges.
-3. Sign in with an existing authorized platform bootstrap account (Spatie \`superadmin\` or \`admin-keuangan\`), create a new organization with the user's own name, and assign existing accounts to it.
-4. Create units, budget cycles and custom budget categories. Do **not** assume example document structures.
-5. Create questions, explicitly assign independent reviewers and scoped contributors, and configure the evidence policy.
-6. When importing XLSX journal files, provide \`line_id\`, \`journal_no\`, \`date\`, \`account_code\`, \`debit\`, \`credit\` columns, mapping any institution-specific headers. Data is staged and must not be treated as verified actuals.
-7. Configure KPI category profile in a draft cycle; view the preview labeled "before Sharing Budget."
-8. Keep \`RKA_ENABLE_OFFICIAL_PUBLICATION=false\` and verify the publication gate with a negative test.
-9. Use superadmin legacy preview to compare historical data without modifying old records.
-10. Perform database-specific schema tests, access-role UAT and complete business-flow tests before requesting a merge.
+## Operasional melalui Filament
 
-## Compliance and deliberate restrictions
+Buat organisasi dan siklus sendiri, lalu tetapkan unit, membership dan role/jabatan khusus. Role kustom dipakai sebagai approver tanpa mewarisi izin admin/finance. Masukkan anggaran dan cost pool, serta periksa hasil alokasinya. Impor jurnal sumber XLSX ke staging, minta reviewer berbeda memverifikasi batch, lalu atur mapping COA sesuai sumber akuntansi.
 
-- Both **organizations** and individual **question instances** have authorization controls.
-- A reviewer must be assigned to the question, not merely possess the global reviewer role; reviewers cannot verify their own synthesis.
-- A user may not accept another user's invitation, contribute after revocation, or use unverified evidence to approve evidence-required claims.
-- Uploads use the local private disk, scoped storage paths and a controlled download endpoint. Production still needs malicious-file scanning, advanced data-retention rules, and granular document classification.
-- No global budget-role privilege is granted automatically by creating a local organization membership.
-- Legacy preview is **superadmin-only** because the original records do not have reliable organization IDs or budget-year references.
-- Financial publication stays blocked. Only preview/test fixtures can enable the export snapshot code path under controlled test configuration.
-- Staff and approver roles are currently **functional role values**; dynamic custom positions/delegation, risk/materiality workflow and SLA remain pending.
+Gunakan menu **Rekonsiliasi, Eliminasi Internal dan KPI Budget** untuk menyimpan run baru dan membaca blocker. Atur kebijakan materialitas dan pengecualian hanya untuk kategori anggaran belum terpetakan. Seluruh sengketa unit harus diselesaikan dan diaudit. Rekonsiliasi bersih disahkan oleh reviewer berbeda; closing diajukan dengan alasan, disetujui dalam 2–5 tahapan role, dan menyimpan snapshot terpisah.
 
-## Known gaps — DO NOT merge as completed RKA end-to-end or deploy to production
+Untuk Buku RKA, pengguna membuat daftar judul bagian bebas. Awalan **NARASI|, KONSOLIDASI|, KPI|, SHARING|, REKONSILIASI|** menentukan blok otomatis, misalnya **KPI|Ringkasan Anggaran dan Realisasi**; judul lainnya menjadi narasi. Seluruh publikasi resmi tetap dibatasi oleh konfigurasi **RKA_ENABLE_OFFICIAL_PUBLICATION=false** secara default. Jangan mengaktifkan flag di produksi tanpa validasi sumber, QA dan persetujuan release.
 
-1. Full journal mapping, balanced posting/reversal processing, prevention of double counting at the ledger/consolidation layer, cost-pool source reconciliation, account/unit mapping, period closing, and authoritative actuals are **not implemented**. XLSX import is staging only.
-2. Complete KPI Budget (with/without special funding categories, actuals, forecasts, after allocation, multi-period profiles, budget-vs-actual) is not implemented. The new calculator is **pre-sharing budget preview only**.
-3. Full approval engine: role/position assignment, delegated authority, dynamic per-risk thresholds, unit disputes, SLA escalation, and SoD for every financial action require further implementation.
-4. Book-content blocks, automatic data-linked tables/charts, professional DOCX layout with a TOC, document branding/logo, and PDF/XLSX report parity require further work.
-5. Evidence content scanning, conflict resolution UI and full claim-level provenance are incomplete.
-6. Legacy RKA adapters presently provide inspection **only**. Mapping legacy unit IDs, accounting periods, parent/child sums and string-valued monetary amounts to the new schema has not been approved or performed.
-7. CI covers selected unit/feature tests; MySQL and complete browser UAT results must be checked before staging deployment. Passing CI alone does not prove production readiness.
+## Quality gates dan deployment
 
-## Rollout strategy
+1. Cadangkan database, clone ke staging isolasi, cek semua migration tambahan dan izin user. Jangan jalankan migrate:fresh di production.
+2. Jalankan instalasi menggunakan composer.lock, lakukan migrasi pada staging, dan verifikasi seluruh resource existing.
+3. GitHub Actions menjalankan PHP lint, composer validate, PHPUnit filter RkaPlatform, Blade compilation, route:list, serta matriks SQLite dan MySQL 8. Lulus CI **bukan** jaminan produksi.
+4. UAT akses negatif lintas organisasi, unit, pertanyaan, bukti, siklus, dan custom role; self-approval harus ditolak.
+5. UAT tiap variasi jurnal dan eliminasi: source berbeda, transaksi reversal, clearing, internal charges, journal unbalanced, mapping account konflik, duplikasi berkas dan perubahan source setelah rekonsiliasi.
+6. UAT materialitas dekat threshold: batas nominal, basis poin, agregasi bruto, sengketa unit, serta pelarangan exception untuk blocker struktural.
+7. UAT closing, pembukaan kembali dan approval dinamis, termasuk identitas SHA snapshot sebelum/sesudah perubahan serta validasi angka lintas unit.
+8. Lakukan **browser UAT** dan **visual QA DOCX/PDF/XLSX** pada banyak unit, bab panjang, tabel banyak halaman dan data organisasi riil. Bandingkan angka hingga sen, grafik, metadata, pagination dan kelengkapan bukti.
+9. Tetapkan mekanisme expand → reconcile → switch dan rollback dengan menjaga histori data lama. Penggantian sistem akuntansi tidak termasuk scope.
 
-The project must use **expand → reconcile → switch**. Do not drop legacy columns/tables/resources. Verify parity on isolated staging data, create rollback plans, run authorization adversarial tests, test rendering of long documents, and keep the PR draft until critical accounting workflows are independently validated.
+## Kekurangan yang tetap harus ditangani sebelum produksi
 
-Known baseline risks to audit separately: legacy RKA table display may mutate records during formatting; global \`User::canAccessFilament()\` currently returns true. Neither should be changed casually without regression coverage for existing roles and pages.
+- Konversi RKA existing dengan mapping unit/akun/tahun/parent-child dan koreksi nilai string yang diverifikasi, tanpa merusak histori.
+- Multi badan hukum, eliminasi antar-legal entity, koreksi jurnal lintas periode, transaksi pajak dan rekonsiliasi source ERP/API yang terautentikasi.
+- Pendorong biaya bersama tambahan, forecast, KPI multi-year, revisi anggaran berjejak lengkap serta persetujuan eksplisit seluruh unit terdampak.
+- SLA eskalasi/delegasi, role hierarchy dinamis, kontrol risiko yang lebih luas, evidence antivirus, penetrasi keamanan.
+- Buku RKA dengan cover profesional, logo, layout style, tabel dan grafik builder, daftar isi otomatis dan pengujian di Word/Excel pembaca asli.
+- Audit legacy terpisah untuk callback tampilan tabel yang menyimpan data dan metode akses panel Filament, dengan regresi pada seluruh fitur existing.
+
+**Release policy: PR tetap Draft, tanpa merge ke main atau deploy.** Publikasi resmi dimatikan secara default sampai business UAT dan quality gate disetujui.
