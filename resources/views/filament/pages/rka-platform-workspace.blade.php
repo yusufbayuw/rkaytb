@@ -70,8 +70,8 @@
                             <h3 class="font-medium">Keanggotaan</h3>
                             <input wire:model.defer="memberEmail" type="email" placeholder="Email akun yang sudah terdaftar" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
                             <select wire:model.defer="memberRole" class="w-full border rounded-lg p-2 dark:bg-gray-900">
-                                @foreach(['contributor','unit_manager','editor','reviewer','finance','publisher','admin'] as $role)
-                                    <option value="{{ $role }}">{{ ucfirst($role) }}</option>
+                                @foreach($assignableRoles as $code => $label)
+                                    <option value="{{ $code }}">{{ $label }}</option>
                                 @endforeach
                             </select>
                             <label class="block text-xs">Lingkup unit (wajib untuk penanggung jawab unit)</label>
@@ -92,6 +92,22 @@
                             <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Buat Siklus</button>
                         </form>
                     </div>
+                    <details class="mt-4 border dark:border-gray-700 rounded-lg p-3">
+                        <summary class="cursor-pointer text-sm font-medium">Role dan Jabatan Persetujuan Kustom</summary>
+                        <p class="text-xs text-gray-500 mt-2">Role organisasi digunakan untuk penugasan dan approval. Role baru tidak otomatis mendapatkan akses admin atau keuangan. Peran sistem yang sudah ada tetap dipertahankan.</p>
+                        <form wire:submit.prevent="addWorkflowRole" class="flex flex-wrap gap-3 mt-3">
+                            <div><label class="block text-xs mb-1">Kode role</label>
+                                <input wire:model.defer="newWorkflowRoleCode" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="spv_keuangan" /></div>
+                            <div><label class="block text-xs mb-1">Nama jabatan</label>
+                                <input wire:model.defer="newWorkflowRoleLabel" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Supervisor Keuangan" /></div>
+                            <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Tambah Role</button>
+                        </form>
+                        <div class="flex flex-wrap gap-2 mt-3 text-xs">
+                            @foreach($assignableRoles as $code => $label)
+                                <span class="border rounded px-2 py-1">{{ $label }} ({{ $code }})</span>
+                            @endforeach
+                        </div>
+                    </details>
                     <p class="mt-4 text-xs text-gray-500">Unit aktif: {{ $units->count() }} · Anggota aktif: {{ $users->count() }} · Siklus: {{ $cycles->count() }}</p>
                 </details>
             @endif
@@ -647,8 +663,7 @@
                                 <div class="border dark:border-gray-700 rounded-lg p-3 text-sm">
                                     <div class="flex flex-wrap justify-between gap-2">
                                         <span>#{{ $approval->id }} · {{ $approval->action }} · {{ $approval->status }} · tahap {{ $approval->current_step + 1 }}</span>
-                                        @if($approval->status === 'pending' && $approval->requested_by !== auth()->id() &&
-                                            ! $approval->decisions()->where('actor_id', auth()->id())->exists())
+                                        @if($approval->can_decide ?? false)
                                             <span class="flex gap-2">
                                                 <button type="button" wire:click="decideCycleApproval({{ $approval->id }}, true)" class="border rounded px-3 py-1">Setujui</button>
                                                 <button type="button" wire:click="decideCycleApproval({{ $approval->id }}, false)" class="border rounded px-3 py-1">Tolak</button>
