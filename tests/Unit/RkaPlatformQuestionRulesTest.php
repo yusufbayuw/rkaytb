@@ -20,6 +20,14 @@ class RkaPlatformQuestionRulesTest extends TestCase
         $this->assertTrue($engine->applies([], []));
     }
 
+    public function test_unsupported_operator_is_rejected_even_without_runtime_context(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        (new QuestionRules())->applies(['all' => [
+            ['field' => 'risk', 'operator' => 'execute', 'value' => 'high'],
+        ]], []);
+    }
+
     public function test_unknown_rule_field_is_rejected(): void
     {
         $this->expectException(\InvalidArgumentException::class);

@@ -33,7 +33,11 @@ class JournalSpreadsheetImporter
         $workbook = $reader->load($file->getRealPath());
         try {
             $sheet = $workbook->getActiveSheet();
-            if (\PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestDataColumn()) > 100) {
+            $colCount = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($sheet->getHighestDataColumn());
+            if ($colCount > 100 || $sheet->getHighestRow() * $colCount > 200000) {
+                throw ValidationException::withMessages(['journalFile' => 'Spreadsheet terlalu besar (maksimal 200.000 sel).']);
+            }
+            if ($colCount > 100) {
                 throw ValidationException::withMessages(['journalFile' => 'Maksimum 100 kolom per impor.']);
             }
             if ($sheet->getHighestRow() > 10001) {
@@ -106,11 +110,31 @@ class JournalSpreadsheetImporter
             ];
         }
         if (!$lines) throw ValidationException::withMessages(['journalFile' => 'Tidak ada baris transaksi yang valid.']);
-        return DB::transaction(function () use ($orgId, $userId, $source, $hash, $file, $lines) {
+        // Source line IDs are idempotency keys: reject partial overlapping imports before database insertion.
+        $duplicate = JournalLine::query()->where('organization_id', $orgId)->where('source', $source)
+            ->whereIn('external_line_id', array_column($lines, 'external_line_id'))
+            ->pluck('external_line_id')->take(5)->all();
+        if ($duplicate) {
+            throw ValidationException::withMessages(['journalFile' => 'Baris sumber sudah pernah diimpor: '.implode(', ', $duplicate)]);
+        }
+        // Journal balance is recorded as a warning. An incomplete batch remains staged, never authoritative.
+        $balanceByJournal = [];
+        foreach ($lines as $line) {
+            $key = $line['journal_no'].'|'.$line['posted_on'];
+            $balanceByJournal[$key] = ($balanceByJournal[$key] ?? 0) +
+                $this->minor($line['debit']) - $this->minor($line['credit']);
+        }
+        $unbalanced = [];
+        foreach ($balanceByJournal as $key => $difference) {
+            if ($difference !== 0) $unbalanced[] = ['journal' => $key, 'difference_minor' => $difference];
+        }
+        return DB::transaction(function () use ($orgId, $userId, $source, $hash, $file, $lines, $unbalanced) {
             $batch = JournalBatch::create([
                 'organization_id' => $orgId, 'source' => $source, 'fingerprint' => $hash,
                 'imported_by' => $userId, 'status' => 'staged', 'row_count' => count($lines),
-                'metadata' => ['filename' => basename($file->getClientOriginalName()), 'format' => 'xlsx'],
+                'metadata' => ['filename' => basename($file->getClientOriginalName()), 'format' => 'xlsx',
+                    'unbalanced_journals' => array_slice($unbalanced, 0, 50),
+                    'unbalanced_count' => count($unbalanced), 'reconciliation_status' => 'not_verified'],
             ]);
             foreach ($lines as $line) {
                 $line['batch_id'] = $batch->id;
@@ -120,6 +144,12 @@ class JournalSpreadsheetImporter
                 ['row_count' => count($lines), 'sha256' => $hash]);
             return $batch;
         });
+    }
+
+    private function minor(string $amount): int
+    {
+        [$whole, $cents] = explode('.', $amount, 2);
+        return (int)$whole * 100 + (int)$cents;
     }
 
     private function money(mixed $value, int $row): string

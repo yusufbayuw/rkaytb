@@ -10,6 +10,7 @@ use Illuminate\Http\UploadedFile;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Tests\TestCase;
+use Illuminate\Validation\ValidationException;
 
 class RkaPlatformJournalImportTest extends TestCase
 {
@@ -37,6 +38,7 @@ class RkaPlatformJournalImportTest extends TestCase
             $this->assertSame($first->id, $second->id);
             $this->assertSame('staged', $first->status);
             $this->assertSame(1, JournalLine::where('organization_id', $org->id)->count());
+            $this->assertSame(1, $first->metadata['unbalanced_count']);
         } finally {
             @unlink($filePath);
         }
