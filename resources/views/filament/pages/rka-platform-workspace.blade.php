@@ -70,9 +70,14 @@
                             <h3 class="font-medium">Keanggotaan</h3>
                             <input wire:model.defer="memberEmail" type="email" placeholder="Email akun yang sudah terdaftar" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
                             <select wire:model.defer="memberRole" class="w-full border rounded-lg p-2 dark:bg-gray-900">
-                                @foreach(['contributor','editor','reviewer','finance','publisher','admin'] as $role)
+                                @foreach(['contributor','unit_manager','editor','reviewer','finance','publisher','admin'] as $role)
                                     <option value="{{ $role }}">{{ ucfirst($role) }}</option>
                                 @endforeach
+                            </select>
+                            <label class="block text-xs">Lingkup unit (wajib untuk penanggung jawab unit)</label>
+                            <select wire:model.defer="memberUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                <option value="">Semua / tanpa unit</option>
+                                @foreach($units as $unit)<option value="{{ $unit->id }}">{{ $unit->name }}</option>@endforeach
                             </select>
                             <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Tambahkan Anggota</button>
                         </form>
@@ -398,7 +403,215 @@
                         </form>
                         <div class="mt-3">
                             @foreach($batches as $batch)
-                                <div class="border-b dark:border-gray-600 py-2 text-sm">Batch #{{ $batch->id }} · {{ $batch->source }} · {{ $batch->row_count }} baris · {{ $batch->status }}</div>
+                                <div class="border-b dark:border-gray-600 py-2 text-sm flex flex-wrap items-center justify-between gap-2">
+                                    <span>Batch #{{ $batch->id }} · {{ $batch->source }} · {{ $batch->row_count }} baris · {{ $batch->status }}</span>
+                                    @if($batch->status === 'staged' && $batch->imported_by !== auth()->id())
+                                        <button type="button" wire:click="verifyJournalBatch({{ $batch->id }})" class="border rounded px-2 py-1">Verifikasi Sumber</button>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    </details>
+                @endif
+
+                @if($isFinance)
+                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                        <summary class="font-semibold cursor-pointer">Pemetaan Akun dan Klasifikasi Jurnal</summary>
+                        <p class="text-xs text-gray-500 mt-2">Setiap kode akun berasal dari sumber jurnal organisasi sendiri. Mapping bersifat efektif untuk satu siklus; pembuat dan pengesah harus berbeda. Jurnal asli tidak dimodifikasi.</p>
+                        <form wire:submit.prevent="draftJournalMapping" class="grid md:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+                            <div><label class="block text-xs mb-1">Kode sumber</label><input wire:model.defer="mappingSource" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Contoh: ledger_1" /></div>
+                            <div><label class="block text-xs mb-1">Kode akun</label><input wire:model.defer="mappingAccount" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                            <div><label class="block text-xs mb-1">Perlakuan</label>
+                                <select wire:model.defer="mappingClass" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                    @foreach(['income'=>'Pendapatan eksternal','expense'=>'Beban','internal_income'=>'Pemulihan/internal income','internal_expense'=>'Beban internal','clearing'=>'Akun antara/clearing','non_pnl'=>'Neraca / bukan laba rugi'] as $key => $label)
+                                        <option value="{{ $key }}">{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div><label class="block text-xs mb-1">Unit default (opsional)</label>
+                                <select wire:model.defer="mappingUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                    <option value="">Unit dari baris jurnal</option>
+                                    @foreach($units as $unit)<option value="{{ $unit->id }}">{{ $unit->name }}</option>@endforeach
+                                </select>
+                            </div>
+                            <button type="submit" class="px-4 py-2 rounded-lg bg-primary-600 text-white">Buat Draft Mapping</button>
+                        </form>
+                        <div class="overflow-x-auto mt-4">
+                            <table class="w-full text-sm">
+                                <thead><tr class="text-left"><th class="p-2">Sumber / akun</th><th class="p-2">Klasifikasi</th><th class="p-2">Periode</th><th class="p-2">Status</th><th class="p-2">Tindakan</th></tr></thead>
+                                <tbody>
+                                    @forelse($accountMappings as $mapping)
+                                        <tr class="border-t dark:border-gray-700">
+                                            <td class="p-2">{{ $mapping->source }} / {{ $mapping->account_code }}</td>
+                                            <td class="p-2">{{ $mapping->classification }}</td>
+                                            <td class="p-2">{{ $mapping->valid_from }} – {{ $mapping->valid_to }}</td>
+                                            <td class="p-2">{{ $mapping->active ? 'Disahkan' : 'Draft' }}</td>
+                                            <td class="p-2">
+                                                @if(!$mapping->active && $mapping->created_by !== auth()->id())
+                                                    <button type="button" wire:click="approveJournalMapping({{ $mapping->id }})" class="border rounded px-2 py-1">Sahkan</button>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr><td colspan="5" class="p-2 text-gray-500">Belum ada mapping. Pilih akun dari file sumber sendiri.</td></tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                        <summary class="font-semibold cursor-pointer">Rekonsiliasi, Eliminasi Internal dan KPI Budget</summary>
+                        <p class="text-xs text-gray-500 mt-2">Laporan sementara memperlihatkan blocker tanpa menyembunyikannya. Jurnal tidak seimbang, akun belum terpetakan, clearing terbuka, dan pasangan pendapatan/beban internal yang tidak cocok menghentikan pengesahan.</p>
+                        <div class="mt-4">
+                            @if($cycleCurrent && $cycleCurrent->status === 'draft')
+                                <button type="button" wire:click="prepareReconciliation" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Hitung dan Simpan Rekonsiliasi Baru</button>
+                            @endif
+                        </div>
+                        <div class="space-y-3 mt-4">
+                            @forelse($reconRuns as $run)
+                                <div class="border dark:border-gray-700 rounded-lg p-4">
+                                    <div class="flex gap-2 flex-wrap justify-between items-center">
+                                        <strong>Versi {{ $run->version }} · {{ $run->status }} · #{{ $run->id }}</strong>
+                                        @if($run->status === 'draft' && $run->prepared_by !== auth()->id() && ($run->report_data['blocker_count'] ?? 1) === 0)
+                                            <button type="button" wire:click="verifyReconciliation({{ $run->id }})" class="border rounded px-3 py-1">Sahkan Rekonsiliasi</button>
+                                        @endif
+                                    </div>
+                                    <p class="text-sm mt-2">Jurnal posted: {{ $run->report_data['posted_line_count'] ?? 0 }} · Blocker: <strong>{{ $run->report_data['blocker_count'] ?? '-' }}</strong></p>
+                                    <div class="grid sm:grid-cols-3 gap-2 text-sm mt-3">
+                                        <span>Pendapatan konsolidasi: {{ $run->report_data['consolidated']['income'] ?? '-' }}</span>
+                                        <span>Beban konsolidasi: {{ $run->report_data['consolidated']['expense'] ?? '-' }}</span>
+                                        <span>Surplus: {{ $run->report_data['consolidated']['surplus'] ?? '-' }}</span>
+                                    </div>
+                                    @if(!empty($run->report_data['blockers']))
+                                        <details class="mt-3"><summary class="cursor-pointer text-sm text-red-700">Lihat masalah rekonsiliasi</summary>
+                                            <div class="max-h-48 overflow-y-auto mt-2 space-y-1 text-xs">
+                                                @foreach($run->report_data['blockers'] as $blocker)
+                                                    <p>{{ $blocker['code'] }} — {{ $blocker['reference'] ?? '' }}</p>
+                                                @endforeach
+                                            </div>
+                                        </details>
+                                    @endif
+                                    <details class="mt-3"><summary class="cursor-pointer text-sm">KPI per unit (manajerial)</summary>
+                                        <div class="overflow-x-auto mt-2"><table class="w-full text-xs">
+                                            <thead><tr class="text-left"><th class="p-2">Unit</th><th class="p-2">Pendapatan anggaran</th><th class="p-2">Beban anggaran</th><th class="p-2">Sharing rencana</th><th class="p-2">Surplus rencana</th><th class="p-2">Surplus aktual</th></tr></thead>
+                                            <tbody>
+                                                @foreach(($run->report_data['unit_managerial'] ?? []) as $entry)
+                                                    <tr class="border-t"><td class="p-2">{{ $entry['unit'] }}</td>
+                                                        <td class="p-2">{{ $entry['plan_income'] }}</td><td class="p-2">{{ $entry['plan_expense'] }}</td>
+                                                        <td class="p-2">{{ $entry['plan_sharing'] }}</td><td class="p-2">{{ $entry['plan_surplus'] }}</td>
+                                                        <td class="p-2">{{ $entry['actual_surplus'] }}</td></tr>
+                                                @endforeach
+                                            </tbody>
+                                        </table></div>
+                                    </details>
+                                </div>
+                            @empty
+                                <p class="text-sm text-gray-500">Belum ada rekonsiliasi. Konfigurasikan mapping akun dan verifikasi sumber terlebih dahulu.</p>
+                            @endforelse
+                        </div>
+                    </details>
+                @endif
+
+                @if($canRaiseDispute)
+                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                        <summary class="font-semibold cursor-pointer">Sengketa Alokasi Sharing Budget</summary>
+                        <p class="text-xs text-gray-500 mt-2">Sengketa terbuka menghentikan closing sampai ada resolusi tercatat. Penanggung jawab unit hanya dapat mengajukan atas unitnya sendiri.</p>
+                        @if($cycleCurrent && $cycleCurrent->status === 'draft')
+                            <form wire:submit.prevent="raiseSharingDispute" class="grid md:grid-cols-3 gap-3 mt-4">
+                                <select wire:model.defer="disputePoolId" class="border rounded-lg p-2 dark:bg-gray-900">
+                                    <option value="">Pilih cost pool</option>
+                                    @foreach($disputePools as $pool)<option value="{{ $pool->id }}">{{ $pool->name }}</option>@endforeach
+                                </select>
+                                <select wire:model.defer="disputeUnitId" class="border rounded-lg p-2 dark:bg-gray-900">
+                                    <option value="">Unit terdampak</option>
+                                    @foreach($units as $unit)<option value="{{ $unit->id }}">{{ $unit->name }}</option>@endforeach
+                                </select>
+                                <textarea wire:model.defer="disputeReason" rows="2" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Dasar keberatan dan rujukan bukti"></textarea>
+                                <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Sengketa</button>
+                            </form>
+                        @endif
+                        @if($isFinance)
+                            <div class="mt-3"><label class="block text-xs">Resolusi (wajib dicatat sebelum menyelesaikan sengketa)</label>
+                                <textarea wire:model.defer="disputeResolution" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea></div>
+                        @endif
+                        @foreach($sharingDisputes as $dispute)
+                            <div class="border-b dark:border-gray-700 py-3 text-sm">
+                                <div class="flex flex-wrap justify-between gap-3"><span>#{{ $dispute->id }} · {{ $dispute->status }} · {{ $dispute->reason }}</span>
+                                    @if($isFinance && $dispute->status === 'open' && $dispute->raised_by !== auth()->id())
+                                        <button type="button" wire:click="resolveSharingDispute({{ $dispute->id }})" class="border rounded px-3 py-1">Selesaikan</button>
+                                    @endif
+                                </div>
+                                @if($dispute->resolution)<p class="mt-1 text-xs text-gray-500">Resolusi: {{ $dispute->resolution }}</p>@endif
+                            </div>
+                        @endforeach
+                    </details>
+                @endif
+
+                @if($isManager)
+                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                        <summary class="font-semibold cursor-pointer">Kebijakan Approval Closing / Reopening</summary>
+                        <p class="text-xs text-gray-500 mt-2">Konfigurasikan 2–5 tingkat persetujuan berdasarkan role organisasi. Pembuat dan pengaktif kebijakan harus berbeda; tahap approval selalu menggunakan versi policy yang dibekukan saat pengajuan.</p>
+                        <form wire:submit.prevent="proposeClosingPolicy" class="grid md:grid-cols-3 gap-3 mt-4">
+                            <select wire:model.defer="policyAction" class="border rounded-lg p-2 dark:bg-gray-900">
+                                <option value="cycle.close">Closing</option><option value="cycle.reopen">Pembukaan kembali</option>
+                            </select>
+                            <select wire:model.defer="policyRisk" class="border rounded-lg p-2 dark:bg-gray-900">
+                                <option value="normal">Normal</option><option value="high">Risiko tinggi</option>
+                            </select>
+                            <div class="md:col-span-3"><label class="block text-xs mb-1">Tahapan JSON (role dan label)</label>
+                                <textarea wire:model.defer="policyStepsJson" rows="3" class="w-full font-mono text-xs border rounded-lg p-2 dark:bg-gray-900" placeholder='[{"label":"Verifikasi","roles":["finance"]},{"label":"Pengesahan","roles":["owner"]}]'></textarea>
+                            </div>
+                            <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Buat Draft Kebijakan</button>
+                        </form>
+                        @foreach($closingPolicies as $policy)
+                            <div class="border-b dark:border-gray-700 py-2 text-sm flex flex-wrap justify-between gap-2">
+                                <span>{{ $policy->action }} · risiko {{ $policy->conditions['risk'] ?? '-' }} · v{{ $policy->version }} · {{ $policy->active ? 'Aktif' : 'Draft/nonaktif' }}</span>
+                                @if(!$policy->active && $policy->created_by !== auth()->id())
+                                    <button type="button" wire:click="activateClosingPolicy({{ $policy->id }})" class="border rounded px-2 py-1">Aktifkan</button>
+                                @endif
+                            </div>
+                        @endforeach
+                    </details>
+                @endif
+
+                @if($canControlClose)
+                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                        <summary class="font-semibold cursor-pointer">Closing, Pembukaan Kembali dan Persetujuan</summary>
+                        <p class="text-xs text-gray-500 mt-2">Status siklus: <strong>{{ $cycleCurrent?->status }}</strong>. Closing mewajibkan rekonsiliasi terakhir disahkan tanpa blocker, serta kebijakan approval yang aktif. Snapshot lama tidak boleh ditimpa.</p>
+                        <div class="mt-4 space-y-3">
+                            <textarea wire:model.defer="cycleApprovalReason" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Alasan dan dasar pengajuan minimal 10 karakter"></textarea>
+                            @if($cycleCurrent?->status === 'draft' && $isFinance)
+                                <button type="button" wire:click="submitCycleApproval('cycle.close')" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Closing Siklus</button>
+                            @elseif($cycleCurrent?->status === 'closed' && $isManager)
+                                <button type="button" wire:click="submitCycleApproval('cycle.reopen')" class="px-4 py-2 border rounded-lg">Ajukan Pembukaan Kembali</button>
+                            @endif
+                        </div>
+                        <div class="mt-5">
+                            <label class="block text-xs mb-1">Alasan penolakan persetujuan (bila diperlukan)</label>
+                            <textarea wire:model.defer="approvalDecisionReason" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
+                        </div>
+                        <div class="space-y-3 mt-4">
+                            @foreach($cycleApprovals as $approval)
+                                <div class="border dark:border-gray-700 rounded-lg p-3 text-sm">
+                                    <div class="flex flex-wrap justify-between gap-2">
+                                        <span>#{{ $approval->id }} · {{ $approval->action }} · {{ $approval->status }} · tahap {{ $approval->current_step + 1 }}</span>
+                                        @if($approval->status === 'pending' && $approval->requested_by !== auth()->id() &&
+                                            ! $approval->decisions()->where('actor_id', auth()->id())->exists())
+                                            <span class="flex gap-2">
+                                                <button type="button" wire:click="decideCycleApproval({{ $approval->id }}, true)" class="border rounded px-3 py-1">Setujui</button>
+                                                <button type="button" wire:click="decideCycleApproval({{ $approval->id }}, false)" class="border rounded px-3 py-1">Tolak</button>
+                                            </span>
+                                        @endif
+                                    </div>
+                                    <p class="text-xs mt-2 text-gray-500">{{ $approval->reason }}</p>
+                                </div>
+                            @endforeach
+                        </div>
+                        <div class="mt-4 space-y-1 text-sm">
+                            @foreach($cycleClosings as $closing)
+                                <div class="border-b dark:border-gray-700 py-2">
+                                    <strong>Snapshot closing v{{ $closing->version }}</strong> · {{ $closing->closed_at }} · hash {{ substr($closing->report_hash, 0, 14) }}
+                                </div>
                             @endforeach
                         </div>
                     </details>
