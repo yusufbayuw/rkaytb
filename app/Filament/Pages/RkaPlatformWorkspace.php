@@ -100,6 +100,7 @@ class RkaPlatformWorkspace extends Page
     public ?int $mappingUnitId = null;
     public string $policyAction = 'cycle.close';
     public string $policyRisk = 'normal';
+    public string $cycleCloseRisk = 'normal';
     public string $policyStepsJson = '[]';
     public string $cycleApprovalReason = '';
     public string $approvalDecisionReason = '';
@@ -301,6 +302,7 @@ class RkaPlatformWorkspace extends Page
         $cycle = Cycle::where('organization_id', $this->orgId())->find($this->cycleId);
         $this->kpiProfileJson = json_encode(($cycle?->settings ?? [])['kpi_profile'] ??
             ['income_categories' => [], 'expense_categories' => []], JSON_UNESCAPED_UNICODE);
+        $this->cycleCloseRisk = ($cycle?->settings ?? [])['close_risk'] ?? 'normal';
     }
 
     public function saveKpiProfile(): void
@@ -619,6 +621,29 @@ class RkaPlatformWorkspace extends Page
     {
         app(FinancialReconciliationService::class)->verify($this->cycle(), $id, (int)auth()->id());
         $this->notify('success', 'Snapshot rekonsiliasi diverifikasi secara independen.');
+    }
+
+    public function updateCycleCloseRisk(): void
+    {
+        $this->managers();
+        $this->validate(['cycleCloseRisk' => 'required|in:normal,high']);
+        $cycle = $this->cycle();
+        if ($cycle->status !== 'draft') {
+            throw ValidationException::withMessages(['cycleCloseRisk' => 'Risiko closing tidak boleh diubah setelah closing.']);
+        }
+        DB::transaction(function () use ($cycle) {
+            $locked = Cycle::where('organization_id', $cycle->organization_id)
+                ->whereKey($cycle->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status !== 'draft') {
+                throw ValidationException::withMessages(['cycleCloseRisk' => 'Siklus sudah ditutup.']);
+            }
+            $settings = $locked->settings ?? [];
+            $settings['close_risk'] = $this->cycleCloseRisk;
+            $locked->update(['settings' => $settings]);
+            $this->audit()->record($locked->organization_id, (int)auth()->id(),
+                'cycle.closing_risk_updated', 'cycle', $locked->id, ['risk' => $this->cycleCloseRisk]);
+        });
+        $this->notify('success', 'Risiko closing disimpan. Rekonsiliasi harus dihitung ulang bila telah disiapkan.');
     }
 
     public function proposeClosingPolicy(): void
