@@ -47,6 +47,16 @@ class FinancialApprovalService
             if ($locked->created_by === $reviewerId) {
                 throw new AuthorizationException('Penyusun alokasi tidak boleh menyetujui hasilnya sendiri.');
             }
+            $cycle = Cycle::where('organization_id', $locked->organization_id)
+                ->whereKey($locked->cycle_id)->firstOrFail();
+            // Re-check amount, all recipients, versioned signatures and disputes under lock.
+            app(SharedPoolUnitConsentService::class)->requireAll($locked, $cycle);
+            $consentingReviewer = DB::table('rka_shared_pool_unit_consents')
+                ->where('pool_id', $locked->id)->where('pool_version', $locked->version)
+                ->where('approved_by', $reviewerId)->exists();
+            if ($consentingReviewer) {
+                throw new AuthorizationException('Reviewer pusat tidak boleh menyetujui alokasi yang ditandatanganinya sebagai unit.');
+            }
             $locked->update(['status' => 'approved', 'approved_by' => $reviewerId, 'approved_at' => now()]);
             $this->audit->record($locked->organization_id, $reviewerId, 'shared_pool.approved', 'shared_pool', $locked->id);
             return $locked;
