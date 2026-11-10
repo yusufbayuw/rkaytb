@@ -13,7 +13,7 @@ class ContributionService
 
     public function invite(QuestionInstance $instance, int $inviterId, int $inviteeId, int $days = 7): Invitation
     {
-        $this->access->membership($instance->organization_id, $inviterId);
+        $this->access->requireReadInstance($instance, $inviterId);
         $this->access->membership($instance->organization_id, $inviteeId);
         if ($instance->owner_user_id !== $inviterId) {
             $this->access->requireRole($instance->organization_id, $inviterId, ['owner', 'admin', 'editor']);
@@ -80,7 +80,7 @@ class ContributionService
 
     public function synthesize(QuestionInstance $instance, int $userId, string $content, array $answerIds): Synthesis
     {
-        $this->access->membership($instance->organization_id, $userId);
+        $this->access->requireReadInstance($instance, $userId);
         if ($instance->owner_user_id !== $userId) {
             $this->access->requireRole($instance->organization_id, $userId, ['owner', 'admin', 'editor']);
         }
@@ -112,6 +112,8 @@ class ContributionService
     public function verify(Synthesis $synthesis, int $reviewerId): void
     {
         $this->access->requireRole($synthesis->organization_id, $reviewerId, ['owner', 'admin', 'reviewer']);
+        $instance = QuestionInstance::query()->findOrFail($synthesis->instance_id);
+        $this->access->requireReadInstance($instance, $reviewerId);
         if ($synthesis->author_id === $reviewerId) {
             throw new AuthorizationException('Pemeriksa tidak boleh menyetujui sintesisnya sendiri.');
         }

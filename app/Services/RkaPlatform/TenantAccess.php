@@ -35,7 +35,7 @@ class TenantAccess
     {
         $this->membership($instance->organization_id, $userId);
         if ($instance->owner_user_id === $userId ||
-            $this->hasRole($instance->organization_id, $userId, ['owner', 'admin', 'editor', 'reviewer'])) {
+            $this->hasRole($instance->organization_id, $userId, ['owner', 'admin'])) {
             return true;
         }
         return $instance->invitations()->where('invited_user_id', $userId)

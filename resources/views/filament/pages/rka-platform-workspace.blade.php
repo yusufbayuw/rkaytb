@@ -242,7 +242,12 @@
                             <div>
                                 <h4 class="font-medium text-sm">Baris Anggaran Terakhir</h4>
                                 @foreach($budgets as $budget)
-                                    <p class="border-b dark:border-gray-600 py-2 text-sm">{{ $budget->name }} · {{ $budget->amount }} ({{ $budget->status }})</p>
+                                    <div class="flex flex-wrap justify-between gap-2 border-b dark:border-gray-600 py-2 text-sm">
+                                        <span>{{ $budget->name }} · {{ $budget->amount }} ({{ $budget->status }})</span>
+                                        @if($budget->status === 'draft' && $budget->created_by !== auth()->id())
+                                            <button wire:click="approveBudget({{ $budget->id }})" class="border rounded px-2 py-1">Setujui</button>
+                                        @endif
+                                    </div>
                                 @endforeach
                             </div>
                             <div>
@@ -251,6 +256,9 @@
                                     <div class="border-b dark:border-gray-600 py-2 text-sm">
                                         <strong>{{ $pool->name }}</strong> · {{ $pool->amount }} ({{ $pool->status }})
                                         <p class="text-xs text-gray-500 break-all">{{ json_encode($pool->allocations) }}</p>
+                                        @if($pool->status === 'draft' && $pool->created_by !== auth()->id())
+                                            <button wire:click="approvePool({{ $pool->id }})" class="border rounded px-2 py-1">Setujui Alokasi</button>
+                                        @endif
                                     </div>
                                 @endforeach
                             </div>

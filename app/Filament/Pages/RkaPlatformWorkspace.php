@@ -10,7 +10,7 @@ use App\Models\RkaPlatform\{
 };
 use App\Services\RkaPlatform\{
     TenantAccess, AuditTrail, ContributionService, QuestionRules,
-    SharedCostAllocator, JournalSpreadsheetImporter, BookPublishingService
+    SharedCostAllocator, JournalSpreadsheetImporter, BookPublishingService, FinancialApprovalService
 };
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
@@ -373,6 +373,7 @@ class RkaPlatformWorkspace extends Page
             'organization_id' => $this->orgId(), 'cycle_id' => $cycle->id,
             'unit_id' => $this->lineUnitId, 'name' => $this->lineName,
             'category' => $this->lineCategory, 'amount' => $this->lineAmount,
+            'created_by' => auth()->id(),
         ]);
         $this->audit()->record($this->orgId(), (int)auth()->id(), 'budget.created', 'budget_line', $line->id);
         $this->lineName = $this->lineAmount = '';
@@ -391,11 +392,28 @@ class RkaPlatformWorkspace extends Page
             'organization_id' => $this->orgId(), 'cycle_id' => $cycle->id,
             'name' => $this->poolName, 'code' => $this->poolCode,
             'amount' => $this->poolAmount, 'method' => $this->poolMethod, 'drivers' => $drivers,
+            'created_by' => auth()->id(),
         ]);
         app(SharedCostAllocator::class)->saveDraft($pool, (int)auth()->id(), $this->access(), $this->audit());
         $this->poolName = $this->poolCode = $this->poolAmount = '';
         $this->poolDrivers = [];
         $this->notify('success', 'Alokasi draft dihitung.');
+    }
+
+    public function approveBudget(int $id): void
+    {
+        $line = BudgetLine::query()->where('organization_id', $this->orgId())
+            ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
+        app(FinancialApprovalService::class)->approveBudget($line, (int)auth()->id());
+        $this->notify('success', 'Anggaran disetujui.');
+    }
+
+    public function approvePool(int $id): void
+    {
+        $pool = SharedPool::query()->where('organization_id', $this->orgId())
+            ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
+        app(FinancialApprovalService::class)->approvePool($pool, (int)auth()->id());
+        $this->notify('success', 'Alokasi disetujui.');
     }
 
     public function importJournal(): void

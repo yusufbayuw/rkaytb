@@ -54,6 +54,12 @@ class BookPublishingService
                 throw ValidationException::withMessages(['book' => 'Konflik narasi pada siklus belum diselesaikan.']);
             }
             $cycle = Cycle::query()->where('organization_id', $book->organization_id)->findOrFail($book->cycle_id);
+            if (BudgetLine::query()->where('organization_id', $book->organization_id)
+                ->where('cycle_id', $book->cycle_id)->where('status', '!=', 'approved')->exists() ||
+                SharedPool::query()->where('organization_id', $book->organization_id)
+                ->where('cycle_id', $book->cycle_id)->where('status', '!=', 'approved')->exists()) {
+                throw ValidationException::withMessages(['book' => 'Seluruh anggaran dan alokasi wajib disahkan sebelum buku diterbitkan.']);
+            }
             if (JournalLine::query()->where('organization_id', $book->organization_id)
                 ->whereBetween('posted_on', [$cycle->starts_on, $cycle->ends_on])
                 ->where('entry_kind', 'unmapped')->where('posting_status', 'posted')->exists()) {
