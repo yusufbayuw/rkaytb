@@ -7,6 +7,9 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        Schema::table('rka_memberships', function (Blueprint $t) {
+            $t->foreignId('unit_id')->nullable()->constrained('rka_units')->nullOnDelete();
+        });
         Schema::create('rka_journal_account_mappings', function (Blueprint $t) {
             $t->id();
             $t->foreignId('organization_id')->constrained('rka_organizations')->cascadeOnDelete();
@@ -95,5 +98,8 @@ return new class extends Migration {
         Schema::dropIfExists('rka_sharing_disputes');
         Schema::dropIfExists('rka_reconciliation_runs');
         Schema::dropIfExists('rka_journal_account_mappings');
+        Schema::table('rka_memberships', function (Blueprint $t) {
+            $t->dropConstrainedForeignId('unit_id');
+        });
     }
 };
