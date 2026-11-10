@@ -91,6 +91,46 @@
                 </details>
             @endif
 
+            @if($canPreviewLegacy)
+                <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <summary class="font-semibold cursor-pointer">Audit Referensi RKA Existing (Baca Saja)</summary>
+                    <p class="text-xs text-gray-500 mt-2">Data lama tidak memiliki pemetaan organisasi dan tahun yang terverifikasi. Pratinjau ini tidak mengimpor atau menghitung ulang RKA.</p>
+                    <form wire:submit.prevent="previewLegacy" class="flex gap-3 flex-wrap items-end mt-4">
+                        <div><label class="block text-xs mb-1">Jenis sumber</label>
+                            <select wire:model.defer="legacySource" class="border rounded-lg p-2 dark:bg-gray-900">
+                                @foreach(\App\Services\RkaPlatform\LegacyBudgetPreviewService::SOURCES as $key => $table)
+                                    <option value="{{ $key }}">{{ $key }} ({{ $table }})</option>
+                                @endforeach
+                            </select></div>
+                        <div><label class="block text-xs mb-1">Unit RKA existing</label>
+                            <select wire:model.defer="legacyUnitId" class="border rounded-lg p-2 dark:bg-gray-900">
+                                <option value="">Pilih unit lama</option>
+                                @foreach($legacyUnits as $unit)
+                                    <option value="{{ $unit->id }}">{{ $unit->nama }}</option>
+                                @endforeach
+                            </select></div>
+                        <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Pratinjau</button>
+                    </form>
+                    @if($legacyPreview)
+                        <div class="mt-4 space-y-2">
+                            <p class="text-sm">{{ $legacyPreview['unit'] }} · {{ $legacyPreview['source'] }} · {{ $legacyPreview['count'] }} baris</p>
+                            <p class="text-xs text-amber-700">{{ $legacyPreview['warning'] }}</p>
+                            <div class="overflow-x-auto"><table class="w-full text-sm">
+                                <thead><tr class="text-left"><th class="p-2">ID lama</th><th class="p-2">Akun</th><th class="p-2">Uraian</th><th class="p-2">Total tersimpan (teks)</th></tr></thead>
+                                <tbody>
+                                    @foreach($legacyPreview['sample'] as $item)
+                                        <tr class="border-t dark:border-gray-700">
+                                            <td class="p-2">{{ $item['id'] }}</td><td class="p-2">{{ $item['account'] }}</td>
+                                            <td class="p-2">{{ $item['description'] }}</td><td class="p-2">{{ $item['total_as_stored'] }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table></div>
+                        </div>
+                    @endif
+                </details>
+            @endif
+
             @if($cycleId)
                 @if($isManager)
                     <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
