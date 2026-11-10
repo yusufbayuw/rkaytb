@@ -14,6 +14,9 @@ class BookPublishingService
     public function saveSection(BookSection $section, int $actor, string $content): void
     {
         $book = $section->book;
+        if (($section->block_type ?? 'narrative') !== 'narrative') {
+            throw ValidationException::withMessages(['section' => 'Bagian keuangan otomatis bersumber dari snapshot closing, bukan diisi manual.']);
+        }
         $this->access->requireRole($book->organization_id, $actor, ['owner','admin','editor']);
         if ($book->status !== 'draft' || $section->status === 'approved') {
             throw ValidationException::withMessages(['section' => 'Bagian telah dikunci.']);
@@ -31,8 +34,36 @@ class BookPublishingService
         if ($book->status !== 'draft' || $section->status !== 'review' || $section->last_edited_by === $actor) {
             throw new AuthorizationException('Review independen diperlukan.');
         }
+        if (($section->block_type ?? 'narrative') !== 'narrative') {
+            $cycle = Cycle::where('organization_id', $book->organization_id)->findOrFail($book->cycle_id);
+            $this->officialClosing($cycle);
+        }
         $section->update(['status' => 'approved']);
         $this->audit->record($book->organization_id, $actor, 'book.section.approved', 'book_section', $section->id);
+    }
+
+    private function officialClosing(Cycle $cycle): array
+    {
+        if ($cycle->status !== 'closed') {
+            throw ValidationException::withMessages(['book' => 'Buku resmi memerlukan closing siklus yang telah disahkan.']);
+        }
+        $closing = DB::table('rka_cycle_closings')->where('organization_id', $cycle->organization_id)
+            ->where('cycle_id', $cycle->id)->orderByDesc('version')->first();
+        if (!$closing) {
+            throw ValidationException::withMessages(['book' => 'Snapshot closing belum tersedia.']);
+        }
+        $recon = DB::table('rka_reconciliation_runs')->where('organization_id', $cycle->organization_id)
+            ->where('cycle_id', $cycle->id)->where('id', $closing->reconciliation_id)->first();
+        if (!$recon || $recon->status !== 'verified' || $recon->source_hash !== $closing->source_hash) {
+            throw ValidationException::withMessages(['book' => 'Rekonsiliasi sumber tidak sah.']);
+        }
+        $report = json_decode($closing->report, true, 512, JSON_THROW_ON_ERROR);
+        if (($report['blocker_count'] ?? 1) !== 0 ||
+            hash('sha256', json_encode($report, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE)) !== $closing->report_hash ||
+            app(FinancialReconciliationService::class)->calculate($cycle)['source_hash'] !== $closing->source_hash) {
+            throw ValidationException::withMessages(['book' => 'Data closing atau hash laporan berubah; buku resmi diblokir.']);
+        }
+        return ['closing' => $closing, 'report' => $report];
     }
 
     public function publish(Book $book, int $actor): Book
@@ -44,8 +75,11 @@ class BookPublishingService
         return DB::transaction(function () use ($book, $actor) {
             $book = Book::query()->lockForUpdate()->findOrFail($book->id);
             if ($book->status !== 'draft') throw ValidationException::withMessages(['book' => 'Buku tidak dalam status draft.']);
+            $cycle = Cycle::query()->where('organization_id', $book->organization_id)->findOrFail($book->cycle_id);
+            $financial = $this->officialClosing($cycle);
             $sections = $book->sections()->get();
-            if (!$sections->count() || $sections->contains(fn ($s) => $s->required && ($s->status !== 'approved' || !trim((string)$s->content))) ||
+            if (!$sections->count() || $sections->contains(fn ($s) => $s->required &&
+                    ($s->status !== 'approved' || (($s->block_type ?? 'narrative') === 'narrative' && !trim((string)$s->content)))) ||
                 $sections->contains(fn ($s) => $s->status !== 'approved')) {
                 throw ValidationException::withMessages(['book' => 'Seluruh bagian harus disetujui dan bagian wajib tidak boleh kosong.']);
             }
@@ -56,7 +90,6 @@ class BookPublishingService
                 ->whereHas('instance', fn ($q) => $q->where('cycle_id', $book->cycle_id))->exists()) {
                 throw ValidationException::withMessages(['book' => 'Konflik narasi pada siklus belum diselesaikan.']);
             }
-            $cycle = Cycle::query()->where('organization_id', $book->organization_id)->findOrFail($book->cycle_id);
             if (BudgetLine::query()->where('organization_id', $book->organization_id)
                 ->where('cycle_id', $book->cycle_id)->where('status', '!=', 'approved')->exists() ||
                 SharedPool::query()->where('organization_id', $book->organization_id)
@@ -75,7 +108,15 @@ class BookPublishingService
                 'title' => $book->title,
                 'currency' => $book->organization->currency,
                 'sections' => $sections->map(fn ($s) => ['code' => $s->code, 'title' => $s->title,
-                    'content' => $s->content, 'required' => $s->required])->all(),
+                    'content' => $s->content, 'required' => $s->required,
+                    'block_type' => $s->block_type ?? 'narrative'])->all(),
+                'closing' => ['id' => $financial['closing']->id,
+                    'version' => $financial['closing']->version,
+                    'reconciliation_id' => $financial['closing']->reconciliation_id,
+                    'source_hash' => $financial['closing']->source_hash,
+                    'report_hash' => $financial['closing']->report_hash,
+                    'closed_at' => $financial['closing']->closed_at],
+                'financial_report' => $financial['report'],
                 'budgets' => BudgetLine::query()->where('organization_id', $book->organization_id)
                     ->where('cycle_id', $book->cycle_id)->where('status', 'approved')
                     ->orderBy('id')->get(['unit_id','account_code','category','name','amount','period_amounts'])->toArray(),
