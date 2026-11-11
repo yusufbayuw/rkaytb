@@ -48,7 +48,7 @@ class SharingImpactGovernance
     {
         $ids = [];
         foreach ($pool->allocations ?? [] as $id => $amount) {
-            if ($this->units->allocationHash($pool) && (float)$amount > 0) $ids[] = (int)$id;
+            if ((float)$amount > 0) $ids[] = (int)$id;
         }
         sort($ids);
         return $ids;
