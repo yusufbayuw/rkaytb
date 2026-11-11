@@ -445,8 +445,10 @@ class RkaPlatformWorkspace extends Page
             ->where('author_id', auth()->id())->max('revision') ?? 0);
         $this->answerText = (string)(Answer::query()->where('instance_id', $id)
             ->where('author_id', auth()->id())->orderByDesc('revision')->value('content') ?? '');
-        $this->synthesisAnswerIds = [];
-        $this->synthesisText = '';
+        $draft = app(\App\Services\RkaPlatform\SynthesisDraftService::class)
+            ->prepare($instance, (int) auth()->id());
+        $this->synthesisAnswerIds = $draft['answer_ids'];
+        $this->synthesisText = $draft['content'];
     }
 
     public function invite(): void
@@ -951,6 +953,7 @@ class RkaPlatformWorkspace extends Page
             'instances' => collect(), 'invitations' => collect(), 'answers' => collect(), 'syntheses' => collect(),
             'books' => collect(), 'bookSections' => collect(), 'templates' => collect(),
             'budgets' => collect(), 'pools' => collect(), 'batches' => collect(), 'conflicts' => collect(),
+            'myTasks' => [],
         ];
         if (!$this->organizationId) return $data;
         $orgId = $this->orgId();
@@ -977,6 +980,8 @@ class RkaPlatformWorkspace extends Page
         if ($this->cycleId) {
             $cycle = $this->cycle();
             $data['cycleCurrent'] = $cycle;
+            $data['myTasks'] = app(\App\Services\RkaPlatform\TaskInboxService::class)
+                ->forCycle($orgId, (int)$cycle->id, (int)auth()->id());
             $consentSvc = app(\App\Services\RkaPlatform\SharedPoolUnitConsentService::class);
             $data['requiresUnitConsent'] = $consentSvc->isRequired($cycle);
             if (($cycle->settings['sharing_unit_approval_policy'] ?? '') === 'impact_based' &&

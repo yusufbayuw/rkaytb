@@ -44,6 +44,36 @@
                 </div>
             </div>
 
+            @if($cycleId)
+                <div class="rounded-xl bg-white dark:bg-gray-800 shadow p-5 space-y-3" id="rka-my-tasks">
+                    <div class="flex items-center justify-between gap-3">
+                        <h3 class="text-lg font-semibold">Tugas Saya <span class="text-sm font-normal text-gray-500">({{ count($myTasks) }})</span></h3>
+                        <span class="text-xs text-gray-500">Diperbarui otomatis dari status pekerjaan</span>
+                    </div>
+                    @forelse($myTasks as $task)
+                        <div class="flex flex-wrap items-center justify-between gap-3 border dark:border-gray-600 rounded-lg p-3 text-sm">
+                            <div class="min-w-0 flex-1">
+                                <div class="font-medium">{{ $task['title'] }}</div>
+                                <p class="text-xs text-gray-500 mt-1">{{ \Illuminate\Support\Str::limit($task['detail'], 160) }}</p>
+                                @if($task['due'])
+                                    <p class="text-xs text-amber-700 mt-1">Tenggat: {{ $task['due'] }}</p>
+                                @endif
+                            </div>
+                            @if($task['action'] === 'open_question')
+                                <button type="button" wire:click="selectInstance({{ $task['id'] }})" class="border rounded-lg px-3 py-2">Buka tugas</button>
+                            @elseif($task['action'] === 'accept_invite')
+                                <button type="button" wire:click="acceptInvite({{ $task['id'] }})" class="border rounded-lg px-3 py-2">Terima undangan</button>
+                            @else
+                                <span class="text-xs text-gray-500">Lanjutkan di bagian {{ in_array($task['action'], ['finance', 'approval']) ? 'keuangan' : 'Buku RKA' }}</span>
+                            @endif
+                        </div>
+                    @empty
+                        <p class="text-sm text-gray-500">Tidak ada tindakan yang menunggu Anda pada siklus ini.</p>
+                    @endforelse
+                    <p class="text-xs text-gray-500">Tugas ditampilkan sesuai peran dan unit. Persetujuan tetap dilakukan oleh pemeriksa independen.</p>
+                </div>
+            @endif
+
             @if($isManager)
                 <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                     <summary class="font-semibold cursor-pointer">Identitas Organisasi / White Label</summary>
@@ -250,7 +280,7 @@
                             </div>
                             @if($isManager || $isInstanceOwner)
                             <form wire:submit.prevent="synthesize" class="mt-4 space-y-2">
-                                <label class="text-sm font-medium">Draf sintesis berdasarkan jawaban terpilih</label>
+                                <label class="text-sm font-medium">Draf sintesis dari jawaban terbaru (wajib diperiksa dan dapat diedit)</label>
                                 <textarea wire:model.defer="synthesisText" rows="4" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Sintesis</button>
                             </form>
