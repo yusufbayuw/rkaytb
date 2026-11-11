@@ -37,14 +37,18 @@ foreach ($legacyTables as $table) {
 }
 
 if ($stage === 'baseline') {
-    foreach (['rkas','rka_gajis'] as $table) {
-        DB::table($table)->insert([
-            'uraian' => $marker, 'is_parent' => false,
-            'is_detail' => true, 'unit_nama' => 'CI_ONLY',
-            'volume' => '2', 'harga_satuan' => '25.25', 'total' => '50.50',
-            'created_at' => now(), 'updated_at' => now(),
-        ]);
-    }
+    DB::table('rkas')->insert([
+        'uraian' => $marker, 'is_parent' => false,
+        'is_detail' => true, 'unit_nama' => 'CI_ONLY',
+        'volume' => '2', 'harga_satuan' => '25.25', 'total' => '50.50',
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
+    // The existing payroll table is deliberately flat (no is_parent/volume/price).
+    DB::table('rka_gajis')->insert([
+        'uraian' => $marker, 'is_detail' => true,
+        'unit_nama' => 'CI_ONLY', 'total' => '50.50',
+        'created_at' => now(), 'updated_at' => now(),
+    ]);
     echo "Legacy marker inserted directly in isolated test DB.\n";
     exit(0);
 }
