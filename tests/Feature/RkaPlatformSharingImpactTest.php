@@ -53,6 +53,20 @@ class RkaPlatformSharingImpactTest extends TestCase
             $pool,$maker->id,app(TenantAccess::class),app(AuditTrail::class)
         );
         $pool->refresh();
+        // A closed earlier-year, independently approved pool is the verified
+        // baseline for routine/parameter changes in the impact-based workflow.
+        $prior = Cycle::create([
+            'organization_id'=>$org->id,'name'=>'Prior Budget Year','year'=>2034,
+            'starts_on'=>'2034-01-01','ends_on'=>'2034-12-31','status'=>'closed',
+        ]);
+        SharedPool::create([
+            'organization_id'=>$org->id,'cycle_id'=>$prior->id,
+            'code'=>$pool->code,'name'=>'Prior central operating cost',
+            'amount'=>$pool->amount,'method'=>$pool->method,
+            'drivers'=>$pool->drivers,'allocations'=>$pool->allocations,
+            'version'=>1,'status'=>'approved','created_by'=>$maker->id,
+            'approved_by'=>$checker->id,'approved_at'=>now(),
+        ]);
         return compact('org','a','b','cycle','maker','checker','owner','admin','headA','headB','pool');
     }
 
@@ -105,13 +119,13 @@ class RkaPlatformSharingImpactTest extends TestCase
 
     public function test_review_may_escalate_after_deadline_only_with_two_distinct_officers(): void
     {
-        Carbon::setTestNow('2041-02-01 08:00:00');
+        Carbon::setTestNow('2035-02-01 08:00:00');
         try {
             $f = $this->fixture();
             $g = app(SharingImpactGovernance::class);
             $assessment = $g->propose($f['pool'],$f['maker']->id,'parameters','review',
                 'Approved finance parameter revision with a limited unit operational impact.',
-                '2041-02-02 12:00:00');
+                '2035-02-02 12:00:00');
             $g->approveAssessment($f['pool'],$assessment,$f['owner']->id);
             app(SharedPoolUnitConsentService::class)->sign($f['pool'],$f['headA']->id);
             try {
@@ -121,7 +135,7 @@ class RkaPlatformSharingImpactTest extends TestCase
             } catch (ValidationException $e) {
                 $this->assertNotEmpty($e->errors());
             }
-            Carbon::setTestNow('2041-02-03 09:00:00');
+            Carbon::setTestNow('2035-02-03 09:00:00');
             $case = $g->proposeEscalation($f['pool'],$f['b']->id,$f['owner']->id,
                 'Review window passed after documented reminders and no formal objection.');
             try {
