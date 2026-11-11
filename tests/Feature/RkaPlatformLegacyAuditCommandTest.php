@@ -7,6 +7,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
+use Symfony\Component\Console\Output\BufferedOutput;
 
 class RkaPlatformLegacyAuditCommandTest extends TestCase
 {
@@ -31,8 +32,9 @@ class RkaPlatformLegacyAuditCommandTest extends TestCase
                 $query->sql)) $writeQueries[] = $query->sql;
         });
 
-        $exit = Artisan::call('rka:audit-legacy', ['--json'=>true,'--strict'=>true]);
-        $report = json_decode(trim(Artisan::output()), true, 512, JSON_THROW_ON_ERROR);
+        $buffer = new BufferedOutput();
+        $exit = Artisan::call('rka:audit-legacy', ['--json'=>true,'--strict'=>true], $buffer);
+        $report = json_decode(trim($buffer->fetch()), true, 512, JSON_THROW_ON_ERROR);
         $this->assertSame(1,$exit);
         $this->assertSame('READ_ONLY',$report['mode']);
         $this->assertGreaterThan(0,$report['issue_count']);
@@ -51,8 +53,9 @@ class RkaPlatformLegacyAuditCommandTest extends TestCase
             'parent_id'=>$root->id,'volume'=>'1','harga_satuan'=>'3.50',
         ]);
         DB::table('rkas')->where('id',$child->id)->update(['unit_nama'=>'B']);
-        $result = Artisan::call('rka:audit-legacy', ['--json'=>true]);
-        $report = json_decode(trim(Artisan::output()), true, 512, JSON_THROW_ON_ERROR);
+        $buffer = new BufferedOutput();
+        $result = Artisan::call('rka:audit-legacy', ['--json'=>true], $buffer);
+        $report = json_decode(trim($buffer->fetch()), true, 512, JSON_THROW_ON_ERROR);
         $this->assertSame(0,$result);
         $this->assertArrayHasKey('rkas:cross_unit_parent',$report['issues_by_type']);
         $this->assertSame('B',DB::table('rkas')->where('id',$child->id)->value('unit_nama'));
@@ -62,10 +65,11 @@ class RkaPlatformLegacyAuditCommandTest extends TestCase
     {
         Rka::create(['uraian'=>'First','unit_nama'=>'A','is_parent'=>true]);
         Rka::create(['uraian'=>'Second','unit_nama'=>'A','is_parent'=>true]);
+        $buffer = new BufferedOutput();
         $exit=Artisan::call('rka:audit-legacy',[
             '--json'=>true,'--strict'=>true,'--limit'=>1,
-        ]);
-        $report=json_decode(trim(Artisan::output()),true,512,JSON_THROW_ON_ERROR);
+        ], $buffer);
+        $report=json_decode(trim($buffer->fetch()),true,512,JSON_THROW_ON_ERROR);
         $this->assertSame(1,$exit);
         $this->assertArrayHasKey('rkas:incomplete_scan',$report['issues_by_type']);
         $this->assertTrue($report['table_summary']['rkas']['truncated']);
