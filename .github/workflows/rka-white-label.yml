@@ -5,9 +5,29 @@ on:
   # migrations, security controls, workflow scripts and dependency files.
   pull_request:
   push:
-    branches: [feature/white-label-rka-platform]
+    branches: [main, feature/white-label-rka-platform]
 
 jobs:
+  frontend-build:
+    name: Production Vite build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, dom, fileinfo, pdo_sqlite, sqlite3, zip, gd, intl
+          coverage: none
+      - name: Install Filament CSS dependencies from composer.lock
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Install frontend dependencies from lockfile
+        run: npm ci
+      - name: Verify production assets
+        run: npm run build
   test:
     runs-on: ubuntu-latest
     steps:
