@@ -36,14 +36,38 @@ class AuditLegacyRka extends Command
 
     public function handle(): int
     {
-        $this->counts = [];
-        $this->samples = [];
         $limit = filter_var($this->option('limit'), FILTER_VALIDATE_INT);
         if ($limit === false || $limit < 1 || $limit > 500000) {
             $this->error('--limit must be between 1 and 500000.');
             return self::FAILURE;
         }
+        $result = $this->scan((int)$limit);
+        if ($this->option('json')) {
+            $this->line(json_encode($result, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        } else {
+            $this->info('READ-ONLY legacy RKA audit (no records were changed).');
+            foreach ($result['table_summary'] as $table => $stats) {
+                $this->line($table.': '.$stats['scanned'].' scanned'.($stats['truncated'] ? ' (INCOMPLETE)' : ''));
+            }
+            foreach ($result['issues_by_type'] as $key => $count) $this->warn($key.': '.$count);
+            $this->info('Total findings: '.$result['issue_count']);
+        }
+        return ($this->option('strict') && $result['issue_count'] > 0)
+            ? self::FAILURE : self::SUCCESS;
+    }
 
+    /**
+     * Pure read-only audit engine. Extracted from console presentation so the
+     * correctness and absence of writes can be tested independently of
+     * Symfony/Laravel console output buffering.
+     */
+    public function scan(int $limit = 200000): array
+    {
+        if ($limit < 1 || $limit > 500000) {
+            throw new \InvalidArgumentException('Audit scan limit must be 1..500000.');
+        }
+        $this->counts = [];
+        $this->samples = [];
         $tables = [];
         foreach (self::TABLES as $table) {
             if (!Schema::hasTable($table)) {
@@ -148,25 +172,13 @@ class AuditLegacyRka extends Command
             ];
         }
 
-        $result = [
+        return [
             'mode' => 'READ_ONLY',
             'table_summary' => $tables,
             'issue_count' => array_sum($this->counts),
             'issues_by_type' => $this->counts,
             'sample_ids_only' => $this->samples,
         ];
-        if ($this->option('json')) {
-            $this->line(json_encode($result, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
-        } else {
-            $this->info('READ-ONLY legacy RKA audit (no records were changed).');
-            foreach ($tables as $table => $stats) {
-                $this->line($table.': '.$stats['scanned'].' scanned'.($stats['truncated'] ? ' (INCOMPLETE)' : ''));
-            }
-            foreach ($this->counts as $key => $count) $this->warn($key.': '.$count);
-            $this->info('Total findings: '.$result['issue_count']);
-        }
-        return ($this->option('strict') && $result['issue_count'] > 0)
-            ? self::FAILURE : self::SUCCESS;
     }
 
     private function issue(string $table, int $id, string $code): void
