@@ -3,42 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\HasLegacyRkaTotals;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Staudenmeir\LaravelAdjacencyList\Eloquent\HasRecursiveRelationships;
 
 class Rka extends Model
 {
-    use HasFactory, HasRecursiveRelationships;
+    use HasFactory, HasRecursiveRelationships, HasLegacyRkaTotals;
 
     protected $guarded = [];
 
-    /**
-     * A leaf write and its stored ancestor aggregates form one financial
-     * transaction. Model hooks alone would otherwise commit the leaf first.
-     */
-    public function save(array $options = [])
-    {
-        return \Illuminate\Support\Facades\DB::transaction(fn () => parent::save($options));
-    }
-
-    public function delete()
-    {
-        return \Illuminate\Support\Facades\DB::transaction(fn () => parent::delete());
-    }
-
-    protected static function booted(): void
-    {
-        static::saving(fn (self $record) => app(\App\Services\LegacyRkaTotals::class)->beforeSave($record));
-        static::saved(fn (self $record) => app(\App\Services\LegacyRkaTotals::class)->afterSave($record));
-        static::deleting(function (self $record): void {
-            if ($record->children()->exists()) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
-                    'parent_id' => 'Hapus atau pindahkan rincian anak sebelum menghapus induk RKA.',
-                ]);
-            }
-        });
-        static::deleted(fn (self $record) => app(\App\Services\LegacyRkaTotals::class)->afterDelete($record));
-    }
 
     public function children() {
         return $this->hasMany(Rka::class, 'parent_id');
