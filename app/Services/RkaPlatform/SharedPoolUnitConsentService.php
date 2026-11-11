@@ -19,7 +19,8 @@ class SharedPoolUnitConsentService
     {
         // Older cycles retain their existing approval behavior; newly created
         // workspace cycles explicitly opt into full impacted-unit consent.
-        return ($cycle->settings['sharing_unit_approval_policy'] ?? 'legacy') === 'required';
+        return in_array(($cycle->settings['sharing_unit_approval_policy'] ?? 'legacy'),
+            ['required','impact_based'], true);
     }
 
     public function allocationHash(SharedPool $pool): string
@@ -75,6 +76,12 @@ class SharedPoolUnitConsentService
                 ->whereKey($locked->cycle_id)->firstOrFail();
             if (!$this->isRequired($cycle) || $cycle->status !== 'draft' || $locked->status !== 'draft') {
                 throw ValidationException::withMessages(['pool' => 'Persetujuan unit tidak diperlukan atau alokasi sudah dikunci.']);
+            }
+            if (($cycle->settings['sharing_unit_approval_policy'] ?? '') === 'impact_based') {
+                $assessment = app(SharingImpactGovernance::class)->approved($locked);
+                if ($assessment->review_tier === 'inform') {
+                    throw ValidationException::withMessages(['pool' => 'Alokasi ini hanya memerlukan pemberitahuan, bukan tanda tangan unit.']);
+                }
             }
             if ((int)$locked->created_by === $actor) {
                 throw new AuthorizationException('Pembuat alokasi tidak boleh menjadi penanda tangan unit.');
@@ -136,6 +143,15 @@ class SharedPoolUnitConsentService
             return;
         }
         $ids = $this->affectedUnitIds($pool);
+        $impactBased = ($cycle->settings['sharing_unit_approval_policy'] ?? '') === 'impact_based';
+        $tier = $impactBased
+            ? app(SharingImpactGovernance::class)->approved($pool)->review_tier
+            : 'approve';
+        if ($tier === 'inform') {
+            // Routine redistribution under an independently approved informational policy:
+            // the impacted units can see the assessment in their workspace.
+            return;
+        }
 
         $signed = DB::table('rka_shared_pool_unit_consents')
             ->where('organization_id', $pool->organization_id)
@@ -143,6 +159,12 @@ class SharedPoolUnitConsentService
             ->where('pool_version', $pool->version)
             ->where('allocation_hash', $this->allocationHash($pool))
             ->whereIn('unit_id', $ids)->pluck('unit_id')->map(fn ($x) => (int)$x)->all();
+        if ($impactBased && $tier === 'review') {
+            // A unit may acknowledge the review, or two independent authorities may
+            // escalate after an explicit deadline. There is never auto-approval on silence.
+            $signed = array_merge($signed,
+                app(SharingImpactGovernance::class)->approvedEscalatedUnits($pool));
+        }
         $missing = array_diff($ids, $signed);
         if ($missing) {
             throw ValidationException::withMessages([
