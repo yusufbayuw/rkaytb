@@ -324,10 +324,11 @@ class RkaPlatformAccountingCloseTest extends TestCase
             'block_type'=>'unit_kpi','required'=>true,'status'=>'review','position'=>2,
         ]);
         $svc=app(BookPublishingService::class);
+        $editorialReviewer=$this->actor($f['org']->id,['reviewer']);
         $svc->saveSection($story,$f['admin']->id,'Narrative reviewed against the closed accounts.');
-        $svc->approveSection($story->fresh(),$f['checker']->id);
-        $svc->approveSection($statement,$f['checker']->id);
-        $svc->approveSection($kpi,$f['checker']->id);
+        $svc->approveSection($story->fresh(),$editorialReviewer->id);
+        $svc->approveSection($statement,$editorialReviewer->id);
+        $svc->approveSection($kpi,$editorialReviewer->id);
         config()->set('rka_platform.enable_official_publication',true);
         $published=$svc->publish($book->fresh(),$f['owner']->id);
         $this->assertSame('published',$published->status);
