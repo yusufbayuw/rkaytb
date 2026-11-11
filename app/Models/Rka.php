@@ -30,6 +30,13 @@ class Rka extends Model
     {
         static::saving(fn (self $record) => app(\App\Services\LegacyRkaTotals::class)->beforeSave($record));
         static::saved(fn (self $record) => app(\App\Services\LegacyRkaTotals::class)->afterSave($record));
+        static::deleting(function (self $record): void {
+            if ($record->children()->exists()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'parent_id' => 'Hapus atau pindahkan rincian anak sebelum menghapus induk RKA.',
+                ]);
+            }
+        });
         static::deleted(fn (self $record) => app(\App\Services\LegacyRkaTotals::class)->afterDelete($record));
     }
 
