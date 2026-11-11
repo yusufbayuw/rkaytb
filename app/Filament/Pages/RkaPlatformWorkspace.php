@@ -979,7 +979,8 @@ class RkaPlatformWorkspace extends Page
             $data['cycleCurrent'] = $cycle;
             $consentSvc = app(\App\Services\RkaPlatform\SharedPoolUnitConsentService::class);
             $data['requiresUnitConsent'] = $consentSvc->isRequired($cycle);
-            if (($cycle->settings['sharing_unit_approval_policy'] ?? '') === 'impact_based') {
+            if (($cycle->settings['sharing_unit_approval_policy'] ?? '') === 'impact_based' &&
+                $data['isFinance']) {
                 $data['impactAssessments'] = DB::table('rka_shared_pool_impact_assessments')
                     ->where('organization_id',$orgId)->where('cycle_id',$cycle->id)
                     ->orderByDesc('id')->limit(30)->get();
