@@ -55,6 +55,40 @@ Untuk Buku RKA, pengguna membuat daftar judul bagian bebas. Awalan **NARASI|, KO
 - **Tanpa migrasi massal**: perubahan tidak menjalankan backfill total historis, penggantian kode unit, atau pemetaan angka buku ke modul baru. Data yang dahulu salah tetap membutuhkan penilaian/rekonsiliasi terkontrol.
 - Operasi SQL langsung, query-builder mass update/delete, dan integrasi pihak ketiga yang tidak memakai `Model::save/delete` dapat melewati hook agregasi. Audit integrasi produksi diperlukan sebelum GO LIVE.
 
+## Hardening terakhir dan pengujian otomatis (11 November 2026)
+
+### Audit data historis tanpa mengubah data
+
+Perintah `php artisan rka:audit-legacy --json` membaca lima tabel legacy berhierarki dan melaporkan:
+- total leaf tidak sama dengan volume × harga;
+- total induk dan kolom Januari–Desember tidak sesuai penjumlahan anak;
+- induk hilang, induk bukan parent, loop parent, hubungan lintas unit;
+- status `incomplete_scan` saat jumlah baris melebihi `--limit` (default 200000).
+
+Perintah ini **hanya SELECT** dan mengeluarkan jumlah temuan serta maksimal 30 sampel **ID record**, tanpa nama atau isi data pribadi. Gunakan `--strict` untuk exit code tidak nol bila terdapat anomali. Pada data historis yang berpotensi besar, jalankan pada salinan database terisolasi. Tidak ada pemutakhiran massal atau koreksi otomatis. Anomali pada data NULL/format angka lama dapat tetap memerlukan pemeriksaan bisnis.
+
+### Perlindungan akses HTTP dan ekspor
+
+Tes HTTP benar-benar memanggil route unduhan: bukti terikat izin per pertanyaan, organisasi lain dan keanggotaan nonaktif ditolak. Buku RKA resmi hanya dapat diunduh oleh **owner/admin/editor/publisher** organisasi; role reviewer pertanyaan saja tidak dapat mengunduh keseluruhan buku. Pengunjung tanpa login diarahkan ke login Filament (bukan gagal karena route Laravel `login` tidak tersedia). Perubahan status membership harus langsung menghilangkan hak unduh.
+
+### CI migrasi dan batas rollback
+
+GitHub Actions pada **setiap PR update** menjalankan lint PHP penuh, Composer, full suite SQLite/MySQL 8, Blade compile, route list dan pemeriksaan pendaftaran perintah audit.
+
+Rehearsal CI secara eksklusif menggunakan database temporer `ci_upgrade_test.sqlite` atau server MySQL service lokal `rka_test` dan mensyaratkan `CI=true`, `GITHUB_ACTIONS=true`, `APP_ENV=testing`. Prosedur: bangun schema legacy 2014/2019/2023 → sisipkan sentinel finansial legacy → jalankan **9 migrasi additive** → verifikasi nilainya tidak berubah → rollback **seluruh 9 migrasi** → verifikasi tabel baru hilang dan legacy tetap sama → reapply 9 migrasi.
+
+**Penting:** SQLite hanya mendukung rollback **seluruh paket migrasi platform** dalam rehearsal ini, bukan rollback parsial di tengah rentang migrasi yang punya kolom foreign key. SQLite tidak mendukung `DROP FOREIGN KEY` sendiri, sehingga down beberapa migrasi sengaja membiarkan kolom yang akan hilang ketika migrasi awal menghapus tabel platform. MySQL mendukung penurunan foreign key secara eksplisit. Operasi rollback yang sama tidak boleh dijalankan di produksi; penanganan rollback produksi berupa rencana terverifikasi dengan backup dan migrasi maju yang tidak merusak histori.
+
+### Cakupan tes baru
+
+- Reconciliation → verified approval → close berjenjang → Buku RKA official → GET ekspor PDF/DOCX/XLSX, termasuk pemeriksaan hash satu snapshot.
+- Perubahan sumber jurnal di tengah approval harus memblokir closing.
+- HTTP cross-tenant dan unauthorized evidence/book export; pencabutan membership menolak export baru.
+- Audit historis baca-saja tidak boleh menjalankan write SQL, mendeteksi stale total/cross-unit, dan menandai partial scan.
+- Upgrade, rollback, reapply secara otomatis pada SQLite dan MySQL sementara.
+
+**Batas yang belum bisa dibuktikan dengan tool GitHub saja:** browser UAT pada database organisasi nyata, kebenaran nominal sumber akuntansi yang diotorisasi, penilaian dokumen panjang oleh aplikasi Word/Excel, dan penetrasi keamanan operasional. Kelulusan full CI dapat mengizinkan **merge kode terkontrol**, tetapi tidak berarti deployment produksi atau aktivasi flag penerbitan.
+
 ## Quality gates dan deployment
 
 1. Cadangkan database, clone ke staging isolasi, cek semua migration tambahan dan izin user. Jangan jalankan migrate:fresh di production.
