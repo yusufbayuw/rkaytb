@@ -14,6 +14,8 @@ return new class extends Migration {
             $t->foreignId('pool_id')->constrained('rka_shared_pools')->cascadeOnDelete();
             $t->unsignedInteger('pool_version');
             $t->string('allocation_hash', 64);
+            $t->foreignId('baseline_pool_id')->nullable()->constrained('rka_shared_pools')->nullOnDelete();
+            $t->string('baseline_hash', 64)->nullable();
             $t->string('change_type', 32); // baseline, routine, parameters, transfer
             $t->string('review_tier', 16); // inform, review, approve
             $t->text('reason');
