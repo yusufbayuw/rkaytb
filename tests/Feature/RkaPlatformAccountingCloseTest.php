@@ -352,7 +352,7 @@ class RkaPlatformAccountingCloseTest extends TestCase
         // Exports must not mutate or recompute the signed financial snapshot.
         $this->assertSame($snapshot['sha256'],$published->fresh()->snapshot['sha256']);
         $this->assertSame($actualClosing->report_hash,
-            DB::table('rka_cycle_closings')->whereKey($actualClosing->id)->value('report_hash'));
+            DB::table('rka_cycle_closings')->where('id',$actualClosing->id)->value('report_hash'));
     }
 
     public function test_financial_source_change_after_first_approval_blocks_final_closing(): void
