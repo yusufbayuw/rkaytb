@@ -581,6 +581,86 @@
                     </details>
                 @endif
 
+                @if($isFinance && $cycleCurrent && ($cycleCurrent->settings['sharing_unit_approval_policy'] ?? '') === 'impact_based')
+                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                        <summary class="font-semibold cursor-pointer">Penilaian Dampak Sharing Budget</summary>
+                        <p class="mt-2 text-xs text-gray-500">Jenis perubahan menentukan respons unit: rutin = informasi/review/persetujuan; perubahan parameter = review/persetujuan; baseline atau perpindahan tanggung jawab = persetujuan formal. Dua pengguna berbeda diperlukan untuk menetapkan penilaian. Alokasi tidak dapat disahkan bila penilaian versinya belum sah.</p>
+                        @if($cycleCurrent->status === 'draft')
+                            <form wire:submit.prevent="proposeSharingImpact" class="grid md:grid-cols-3 gap-3 mt-4">
+                                <div><label class="block text-xs">Alokasi</label>
+                                    <select wire:model.defer="impactPoolId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                        <option value="">Pilih pool draft</option>
+                                        @foreach($pools->where('status','draft') as $pool)<option value="{{ $pool->id }}">{{ $pool->name }} · v{{ $pool->version }}</option>@endforeach
+                                    </select>
+                                </div>
+                                <div><label class="block text-xs">Jenis perubahan</label>
+                                    <select wire:model.defer="impactChangeType" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                        <option value="baseline">Alokasi awal/baseline</option>
+                                        <option value="routine">Rutin sesuai kebijakan</option>
+                                        <option value="parameters">Perubahan parameter</option>
+                                        <option value="transfer">Perpindahan tanggung jawab</option>
+                                    </select>
+                                </div>
+                                <div><label class="block text-xs">Respons unit</label>
+                                    <select wire:model.defer="impactTier" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                        <option value="inform">Informasi</option>
+                                        <option value="review">Review/konfirmasi</option>
+                                        <option value="approve">Persetujuan formal</option>
+                                    </select>
+                                </div>
+                                <div><label class="block text-xs">Batas review (khusus tier review)</label>
+                                    <input wire:model.defer="impactDueAt" type="datetime-local" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                </div>
+                                <div class="md:col-span-2"><label class="block text-xs">Alasan klasifikasi dampak dan dasar kebijakan</label>
+                                    <textarea wire:model.defer="impactReason" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Sebutkan dasar perubahan, besaran dampak, dan mengapa tingkat respons sesuai"></textarea>
+                                </div>
+                                <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Penilaian Dampak</button>
+                            </form>
+                        @endif
+                        @forelse($impactAssessments as $assessment)
+                            <div class="mt-3 border-b dark:border-gray-700 py-2 text-sm">
+                                <div class="flex flex-wrap justify-between gap-2">
+                                    <span>Pool #{{ $assessment->pool_id }} · versi {{ $assessment->pool_version }} · {{ $assessment->change_type }} / {{ $assessment->review_tier }} · {{ $assessment->status }}</span>
+                                    @if($isManager && $assessment->status === 'draft' && $assessment->prepared_by !== auth()->id() && $cycleCurrent->status === 'draft')
+                                        <button type="button" wire:click="approveSharingImpact({{ $assessment->id }})" class="border rounded px-2 py-1">Sahkan Klasifikasi</button>
+                                    @endif
+                                </div>
+                                <p class="text-xs text-gray-500 mt-1">{{ $assessment->reason }}</p>
+                            </div>
+                        @empty
+                            <p class="mt-3 text-xs text-gray-500">Belum ada penilaian dampak. Alokasi belum dapat disahkan sebelum penilaian dibuat dan diverifikasi.</p>
+                        @endforelse
+                    </details>
+                    @if($isManager)
+                        <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                            <summary class="font-semibold cursor-pointer">Eskalasi Review Unit yang Melewati Tenggat</summary>
+                            <p class="mt-2 text-xs text-gray-500">Hanya berlaku untuk tier review yang telah melewati tenggat. Tidak ada persetujuan otomatis. Dua pejabat berbeda wajib menyetujui, dan sengketa terbuka tetap memblokir.</p>
+                            @if($cycleCurrent->status === 'draft')
+                                <form wire:submit.prevent="proposeSharingReviewEscalation" class="grid md:grid-cols-3 gap-3 mt-4">
+                                    <select wire:model.defer="reviewEscalationPoolId" class="border rounded-lg p-2 dark:bg-gray-900">
+                                        <option value="">Pilih alokasi</option>
+                                        @foreach($pools->where('status','draft') as $pool)<option value="{{ $pool->id }}">{{ $pool->name }}</option>@endforeach
+                                    </select>
+                                    <select wire:model.defer="reviewEscalationUnitId" class="border rounded-lg p-2 dark:bg-gray-900">
+                                        <option value="">Pilih unit belum merespons</option>
+                                        @foreach($units as $unit)<option value="{{ $unit->id }}">{{ $unit->name }}</option>@endforeach
+                                    </select>
+                                    <textarea wire:model.defer="reviewEscalationReason" rows="2" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Bukti upaya review dan alasan eskalasi"></textarea>
+                                    <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Eskalasi</button>
+                                </form>
+                            @endif
+                            @foreach($reviewEscalations as $escalation)
+                                <div class="mt-3 border-b dark:border-gray-700 py-2 text-sm flex justify-between gap-2">
+                                    <span>Pool #{{ $escalation->pool_id }} · Unit #{{ $escalation->unit_id }} · v{{ $escalation->pool_version }} · {{ $escalation->status }}</span>
+                                    @if($escalation->status === 'pending' && $escalation->proposed_by !== auth()->id() && $cycleCurrent->status === 'draft')
+                                        <button type="button" wire:click="approveSharingReviewEscalation({{ $escalation->id }})" class="border rounded px-2 py-1">Sahkan Eskalasi</button>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </details>
+                    @endif
+                @endif
+
                 @if($requiresUnitConsent && $unitConsentPools->count())
                     <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Persetujuan Sharing Budget untuk Unit Saya</summary>
@@ -589,10 +669,15 @@
                             @foreach($unitConsentPools as $pool)
                                 <div class="border-b dark:border-gray-700 py-2 flex flex-wrap gap-2 items-center justify-between text-sm">
                                     <span>{{ $pool->name }} · Versi {{ $pool->version }} · Dibebankan {{ ($pool->allocations ?? [])[(string)$myUnitId] ?? '-' }} · {{ $pool->status }}</span>
-                                    @if(in_array($pool->id, $signedPoolIds))
-                                        <span class="font-medium text-green-700">Disetujui unit</span>
+                                    @php($assessment = $myImpactAssessmentByPool[$pool->id] ?? null)
+                                    @if(($cycleCurrent->settings['sharing_unit_approval_policy'] ?? '') === 'impact_based' && (!$assessment || $assessment->status !== 'approved'))
+                                        <span class="text-gray-500">Menunggu penilaian dampak independen</span>
+                                    @elseif($assessment && $assessment->review_tier === 'inform')
+                                        <span class="font-medium">Informasi rutin — {{ $assessment->reason }}</span>
+                                    @elseif(in_array($pool->id, $signedPoolIds))
+                                        <span class="font-medium text-green-700">{{ $assessment && $assessment->review_tier === 'review' ? 'Review diakui unit' : 'Disetujui unit' }}</span>
                                     @elseif($pool->status === 'draft' && $cycleCurrent?->status === 'draft' && $pool->created_by !== auth()->id())
-                                        <button type="button" wire:click="consentSharedPool({{ $pool->id }})" class="border rounded px-3 py-1">Setujui untuk Unit Saya</button>
+                                        <button type="button" wire:click="consentSharedPool({{ $pool->id }})" class="border rounded px-3 py-1">{{ $assessment && $assessment->review_tier === 'review' ? 'Konfirmasi Review' : 'Setujui untuk Unit Saya' }}</button>
                                     @endif
                                 </div>
                             @endforeach
