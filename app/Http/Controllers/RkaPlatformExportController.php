@@ -13,7 +13,8 @@ class RkaPlatformExportController extends Controller
     {
         abort_unless(in_array($format, ['pdf','docx','xlsx'], true), 404);
         $access->requireRole($book->organization_id, (int)$request->user()->id,
-            ['owner','admin','editor','publisher','reviewer']);
+            // Question reviewer membership alone does not authorize full-book exports.
+            ['owner','admin','editor','publisher']);
         return $export->export($book, $format);
     }
 }
