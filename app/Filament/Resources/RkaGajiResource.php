@@ -39,6 +39,24 @@ class RkaGajiResource extends Resource
             && parent::canCreate();
     }
 
+    public static function canView(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, true)
+            && parent::canView($record);
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, true)
+            && parent::canEdit($record);
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, true)
+            && parent::canDelete($record);
+    }
+
     public static function shouldRegisterNavigation(): bool
     {
         return self::canViewAny() && parent::shouldRegisterNavigation();
