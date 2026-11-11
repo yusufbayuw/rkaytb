@@ -61,6 +61,13 @@ class SharingImpactGovernance
         return array_map(fn ($value) => (string)(float)$value, $items);
     }
 
+    private function normalizedAllocations(SharedPool $pool): array
+    {
+        $items = $pool->allocations ?? [];
+        ksort($items, SORT_NUMERIC);
+        return array_map(fn ($value) => number_format((float)$value, 2, '.', ''), $items);
+    }
+
     public function approved(SharedPool $pool): object
     {
         $assessment = $this->forPool($pool);
@@ -120,6 +127,11 @@ class SharingImpactGovernance
                     $this->recipientIds($baseline) !== $this->recipientIds($locked)) {
                     $this->fail('Rutin hanya berlaku ketika metode, bobot, dan penerima sama dengan baseline resmi.');
                 }
+            }
+            if ($baseline && $changeType === 'routine' && $tier === 'inform' &&
+                ((string)$baseline->amount !== (string)$locked->amount ||
+                 $this->normalizedAllocations($baseline) !== $this->normalizedAllocations($locked))) {
+                $this->fail('Pemberitahuan rutin hanya cukup bila nominal total dan biaya tiap unit tidak berubah dari baseline resmi; perubahan nominal memerlukan review atau persetujuan unit.');
             }
             if ($baseline && $changeType === 'parameters' &&
                 $this->recipientIds($baseline) !== $this->recipientIds($locked)) {
