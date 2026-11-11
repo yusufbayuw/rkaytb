@@ -214,4 +214,36 @@ class RkaPlatformSharingImpactTest extends TestCase
             ->assertSee('Informasi rutin');
     }
 
+    public function test_routine_tier_is_blocked_without_a_closed_approved_baseline(): void
+    {
+        $f = $this->fixture();
+        Cycle::query()->where('organization_id',$f['org']->id)
+            ->where('year',2034)->update(['status'=>'draft']);
+        $this->expectException(ValidationException::class);
+        app(SharingImpactGovernance::class)->propose($f['pool'],$f['maker']->id,
+            'routine','inform','A claimed routine cost allocation without a closed source baseline.');
+    }
+
+    public function test_open_unit_dispute_cannot_be_replaced_by_review_escalation(): void
+    {
+        Carbon::setTestNow('2035-04-01 09:00:00');
+        try {
+            $f = $this->fixture();
+            $g = app(SharingImpactGovernance::class);
+            $assessment = $g->propose($f['pool'],$f['maker']->id,'parameters','review',
+                'An operational driver change that the affected unit should inspect.',
+                '2035-04-02 09:00:00');
+            $g->approveAssessment($f['pool'],$assessment,$f['owner']->id);
+            app(\App\Services\RkaPlatform\FinancialClosingService::class)
+                ->raiseDispute($f['cycle'],$f['headB']->id,$f['pool']->id,$f['b']->id,
+                    'The allocation method does not match the local unit cost center records.');
+            Carbon::setTestNow('2035-04-03 09:00:00');
+            $this->expectException(ValidationException::class);
+            $g->proposeEscalation($f['pool'],$f['b']->id,$f['owner']->id,
+                'Attempt to bypass an unresolved recorded unit objection after deadline.');
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
 }
