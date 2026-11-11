@@ -56,7 +56,10 @@
                                 <div class="font-medium">{{ $task['title'] }}</div>
                                 <p class="text-xs text-gray-500 mt-1">{{ \Illuminate\Support\Str::limit($task['detail'], 160) }}</p>
                                 @if($task['due'])
-                                    <p class="text-xs text-amber-700 mt-1">Tenggat: {{ $task['due'] }}</p>
+                                    @php $overdue = \Illuminate\Support\Carbon::parse($task['due'])->isPast(); @endphp
+                                    <p class="text-xs {{ $overdue ? 'text-red-700 font-semibold' : 'text-amber-700' }} mt-1">
+                                        {{ $overdue ? 'Lewat tenggat:' : 'Tenggat:' }} {{ $task['due'] }}
+                                    </p>
                                 @endif
                             </div>
                             @if($task['action'] === 'open_question')
@@ -64,7 +67,8 @@
                             @elseif($task['action'] === 'accept_invite')
                                 <button type="button" wire:click="acceptInvite({{ $task['id'] }})" class="border rounded-lg px-3 py-2">Terima undangan</button>
                             @else
-                                <span class="text-xs text-gray-500">Lanjutkan di bagian {{ in_array($task['action'], ['finance', 'approval']) ? 'keuangan' : 'Buku RKA' }}</span>
+                                <a href="{{ in_array($task['action'], ['finance', 'approval']) ? '#rka-finance-workflow' : '#rka-book-workflow' }}"
+                                   class="border rounded-lg px-3 py-2 text-primary-600">Lihat pekerjaan</a>
                             @endif
                         </div>
                     @empty
@@ -349,7 +353,7 @@
                 @endif
 
                 @if($isFinance)
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details id="rka-finance-workflow" open class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">KPI Budget — Pratinjau Sebelum Sharing Budget</summary>
                         <form wire:submit.prevent="saveKpiProfile" class="space-y-2 mt-3">
                             <label class="text-sm font-medium block">Kategori pendapatan dan biaya untuk siklus ini</label>
@@ -856,7 +860,7 @@
                 @endif
 
                 @if($books->count())
-                    <div class="grid lg:grid-cols-3 gap-5">
+                    <div id="rka-book-workflow" class="grid lg:grid-cols-3 gap-5">
                         <div class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                             <h3 class="font-semibold">Buku RKA</h3>
                             @foreach($books as $book)
