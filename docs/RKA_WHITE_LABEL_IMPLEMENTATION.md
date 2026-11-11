@@ -24,7 +24,7 @@
 | Narasi | Bank pertanyaan, penugasan reviewer per pertanyaan, undangan, kontribusi versi, sintesis, konflik, evidence privat/verified | Kontrol kualitas semantik dan virus scan belum lengkap |
 | Buku RKA | Template judul sendiri, blok NARASI/KONSOLIDASI/KPI/SHARING/REKONSILIASI, editor/reviewer, snapshot angka hanya dari closing sah | Drag-and-drop, daftar isi otomatis, styling profesional kompleks belum lengkap |
 | Ekspor | DOCX/PDF/XLSX dari snapshot identik, tabel konsolidasi, KPI per unit, Sharing Budget, rekonsiliasi dan grafik | QA visual dokumen panjang masih diperlukan |
-| RKA existing | **Preview baca-saja oleh superadmin**; model RKA Investasi kini menghitung total leaf saat save dan menjumlah ulang semua induk ketika item diedit, dipindah atau dihapus; enam resource legacy memerlukan unit legacy/role keuangan | Data historis tidak dipaksa migrasi massal; seluruh resource RKA legacy lain tetap perlu UAT lapangan |
+| RKA existing | **Preview legacy baca-saja oleh superadmin**; investasi/maintenance/consumable/operasional/pendapatan memakai transaksi dan perhitungan ulang parent pada save/delete; **56 penyimpanan dari formatter tabel dihilangkan**; enam resource dibatasi aksesnya termasuk view/edit/delete per record | Gaji tetap memakai isian total manual. Data historis tidak ditulis ulang otomatis; setiap modul perlu UAT browser dengan data nyata |
 
 ## Aturan perhitungan dan kontrol data
 
@@ -47,6 +47,14 @@ Gunakan menu **Rekonsiliasi, Eliminasi Internal dan KPI Budget** untuk menyimpan
 
 Untuk Buku RKA, pengguna membuat daftar judul bagian bebas. Awalan **NARASI|, KONSOLIDASI|, KPI|, SHARING|, REKONSILIASI|** menentukan blok otomatis, misalnya **KPI|Ringkasan Anggaran dan Realisasi**; judul lainnya menjadi narasi. Seluruh publikasi resmi tetap dibatasi oleh konfigurasi **RKA_ENABLE_OFFICIAL_PUBLICATION=false** secara default. Jangan mengaktifkan flag di produksi tanpa validasi sumber, QA dan persetujuan release.
 
+## Perlindungan tambahan pada RKA legacy
+
+- **Tulis-saat-edit, bukan tulis-saat-baca.** Pada modul Investasi, Maintenance, Consumable, Operasional, dan Pendapatan, formulir/table inline menyimpan angka input; `HasLegacyRkaTotals` menyinkronkan total rincian, total induk hingga akar, dan bulan pada satu transaksi.
+- Parent harus masih merupakan induk, berada dalam unit legacy yang sama, dan tidak membuat hubungan melingkar. Parent tidak boleh dipindah ke unit lain saat masih memiliki anak, dihapus sebelum anak dipindah, atau dikonversi ke leaf secara sepihak. Penyusunan total manual yang bertentangan dengan volume × harga diganti dengan nilai formula saat penyimpanan.
+- Permission `canViewAny/canCreate/canView/canEdit/canDelete` ditambahkan pada enam resource RKA lama untuk mencegah akses record lintas unit; akun keuangan legacy mempertahankan aturan akses lintas unit yang sebelumnya berlaku pada modul Gaji.
+- **Tanpa migrasi massal**: perubahan tidak menjalankan backfill total historis, penggantian kode unit, atau pemetaan angka buku ke modul baru. Data yang dahulu salah tetap membutuhkan penilaian/rekonsiliasi terkontrol.
+- Operasi SQL langsung, query-builder mass update/delete, dan integrasi pihak ketiga yang tidak memakai `Model::save/delete` dapat melewati hook agregasi. Audit integrasi produksi diperlukan sebelum GO LIVE.
+
 ## Quality gates dan deployment
 
 1. Cadangkan database, clone ke staging isolasi, cek semua migration tambahan dan izin user. Jangan jalankan migrate:fresh di production.
@@ -66,7 +74,7 @@ Untuk Buku RKA, pengguna membuat daftar judul bagian bebas. Awalan **NARASI|, KO
 - Pendorong biaya bersama tambahan, forecast, KPI multi-year, dan revisi anggaran/Sharing Budget approved yang memerlukan baseline dan versi formal baru. Eskalasi tier approval yang memindahkan tanggung jawab tetap diblokir tanpa mandat legal yang ditetapkan organisasi.
 - SLA/pengingat otomatis (meskipun tenggat manual dan eskalasi dua pejabat sudah ada), delegasi, role hierarchy dinamis, evidence antivirus, penetrasi keamanan.
 - Buku RKA dengan cover profesional, logo, layout style, tabel dan grafik builder, daftar isi otomatis dan pengujian di Word/Excel pembaca asli.
-- RKA Investasi menghitung total dan agregasi induk saat save/delete, sementara rendering hanya membaca; enam resource legacy kini membatasi akses pengguna tanpa lingkup unit. Masih perlu uji browser dengan data historis, audit resource legacy lain, dan rekonsiliasi total yang sudah salah sebelum pembaruan ini (tidak ditulis ulang otomatis).
+- Lima model RKA legacy yang memiliki volume/harga dan hirarki kini menghitung total dan dua belas bulan saat save/delete dalam transaksi. Semua formatter tabelnya hanya membaca, dan setiap akses record Filament membatasi unit sesuai kebijakan lama. Model Gaji memiliki total manual dan tidak diubah formulanya. Tetap perlu **audit nonmutatif** atas nilai historis yang sudah stale, uji browser, serta uji bulk import/query-builder yang secara alami dapat melewati Eloquent model hooks; operasi koreksi histori harus disahkan dan dilakukan terpisah.
 
 **Batas finansial:** mesin angka saat ini memakai dua desimal untuk semua mata uang. Organisasi yang memakai presisi selain dua desimal (contohnya JPY atau KWD) memerlukan perluasan skema dan kalkulator sebelum digunakan untuk laporan resmi.
 
