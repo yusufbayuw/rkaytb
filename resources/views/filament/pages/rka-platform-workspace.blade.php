@@ -190,6 +190,13 @@
                 @if($isManager)
                     <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Bank Pertanyaan dan Penugasan</summary>
+                        <div class="mt-4 flex flex-wrap items-center gap-3 rounded-lg border dark:border-gray-600 p-3">
+                            <div class="flex-1">
+                                <p class="text-sm font-medium">Penugasan otomatis</p>
+                                <p class="text-xs text-gray-500 mt-1">Gunakan peran dan unit yang sudah diatur. Hanya tugas dengan satu pemilik jelas dan reviewer independen yang dibuat; penugasan existing tidak diubah.</p>
+                            </div>
+                            <button type="button" wire:click="assignQuestionsAutomatically" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Siapkan Penugasan</button>
+                        </div>
                         <div class="grid lg:grid-cols-2 gap-5 mt-4">
                             <form wire:submit.prevent="createQuestion" class="space-y-2">
                                 <h3 class="font-medium">Buat Pertanyaan</h3>

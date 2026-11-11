@@ -41,6 +41,11 @@ class TaskInboxService
 
         foreach (QuestionInstance::where('organization_id', $org)->where('cycle_id', $cycle)
             ->where('status', 'open')->where('owner_user_id', $user)->limit(40)->get() as $instance) {
+            if (!Answer::where('instance_id', $instance->id)->where('author_id', $user)->exists()) {
+                $add('owner-answer:'.$instance->id, 'Isi jawaban sebagai penanggung jawab',
+                    $instance->prompt_snapshot, 'open_question', $instance->id,
+                    $instance->due_at?->toDateTimeString());
+            }
             if (Answer::where('instance_id', $instance->id)->exists() &&
                 !Synthesis::where('instance_id', $instance->id)->whereIn('status', ['pending_review', 'verified'])->exists()) {
                 $add('synthesis:'.$instance->id, 'Tinjau draf sintesis', $instance->prompt_snapshot,

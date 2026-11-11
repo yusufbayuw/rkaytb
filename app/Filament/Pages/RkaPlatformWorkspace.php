@@ -430,6 +430,15 @@ class RkaPlatformWorkspace extends Page
         $this->notify('success', 'Pertanyaan ditambahkan.');
     }
 
+    public function assignQuestionsAutomatically(): void
+    {
+        $this->managers();
+        $result = app(\App\Services\RkaPlatform\QuestionAssignmentAutomation::class)
+            ->assign($this->cycle(), (int)auth()->id());
+        $this->notify('success', $result['created'].' penugasan dibuat otomatis; '.
+            $result['skipped'].' dilewati (sudah ada, tidak cocok, atau penanggung jawab ambigu).');
+    }
+
     public function createInstance(): void
     {
         $this->managers(); $cycle = $this->cycle();
