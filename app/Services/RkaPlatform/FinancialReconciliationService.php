@@ -141,6 +141,10 @@ class FinancialReconciliationService
         $pools = SharedPool::where('organization_id', $org)->where('cycle_id', $cycle->id)->orderBy('id')->get();
         $unitConsents = DB::table('rka_shared_pool_unit_consents')->where('organization_id', $org)
             ->where('cycle_id', $cycle->id)->orderBy('id')->get();
+        $impactAssessments = DB::table('rka_shared_pool_impact_assessments')->where('organization_id', $org)
+            ->where('cycle_id', $cycle->id)->orderBy('id')->get();
+        $reviewEscalations = DB::table('rka_shared_pool_escalations')->where('organization_id', $org)
+            ->where('cycle_id', $cycle->id)->orderBy('id')->get();
         $disputes = DB::table('rka_sharing_disputes')->where('organization_id', $org)
             ->where('cycle_id', $cycle->id)->orderBy('id')->get();
         $materialityPolicies = DB::table('rka_materiality_policies')->where('organization_id', $org)
@@ -155,6 +159,8 @@ class FinancialReconciliationService
             'journal' => $journal->toArray(), 'batches' => $batches->toArray(),
             'mappings' => $maps->toArray(), 'budgets' => $budgets->toArray(),
             'pools' => $pools->toArray(), 'unit_consents' => $unitConsents->toArray(),
+            'impact_assessments' => $impactAssessments->toArray(),
+            'review_escalations' => $reviewEscalations->toArray(),
             'disputes' => $disputes->toArray(),
             'materiality_policies' => $materialityPolicies->toArray(), 'exceptions' => $exceptions->toArray(),
             'units' => $units->toArray(),
