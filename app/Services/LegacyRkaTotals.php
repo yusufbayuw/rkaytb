@@ -19,15 +19,47 @@ class LegacyRkaTotals
      */
     public function beforeSave(Rka $rka): void
     {
+        // Validate only new or modified ancestry. Existing legacy records with an
+        // untouched parent are not silently rewritten or migrated.
+        if (!$rka->exists || $rka->isDirty(['parent_id', 'unit_nama', 'is_parent'])) {
+            $this->validateAncestry($rka);
+        }
+
+        if ($rka->exists && $rka->isDirty('unit_nama') && $rka->children()->exists()) {
+            throw ValidationException::withMessages([
+                'unit_nama' => 'Unit induk yang mempunyai anak tidak dapat dipindahkan secara sepihak.',
+            ]);
+        }
+
+        if ($rka->exists && $rka->isDirty('is_parent') && !(bool)$rka->is_parent
+            && $rka->children()->exists()) {
+            throw ValidationException::withMessages([
+                'is_parent' => 'Anggaran induk yang masih mempunyai anak tidak dapat diubah menjadi rincian.',
+            ]);
+        }
+
         if ((bool)$rka->is_parent) {
             return;
         }
 
-        if (!$rka->exists || $rka->isDirty(['volume', 'harga_satuan', 'is_parent'])) {
-            // Older data may contain manually entered totals without a volume or price.
-            // Do not erase such records until both inputs have actually been supplied.
+        if (!$rka->exists || $rka->isDirty([
+            'volume', 'harga_satuan', 'is_parent', 'total', 'total_view', 'total_terbilang',
+        ])) {
+            // Preserve historic incomplete rows on unrelated edits. Explicit
+            // attempts to clear a financial input or overwrite a derived total
+            // are rejected rather than leaving stale financial figures.
             if ($rka->volume === null || $rka->harga_satuan === null) {
-                return;
+                if ($rka->exists && !$rka->isDirty([
+                    'volume', 'harga_satuan', 'total', 'total_view', 'total_terbilang',
+                ])) {
+                    return;
+                }
+                if (!$rka->exists && !$rka->isDirty(['total', 'total_view', 'total_terbilang'])) {
+                    return;
+                }
+                throw ValidationException::withMessages([
+                    'total' => 'Volume dan harga satuan harus terisi sebelum total dapat diubah.',
+                ]);
             }
 
             $volume = $this->number($rka->volume, 'volume');
@@ -40,6 +72,35 @@ class LegacyRkaTotals
             $rka->total = number_format($amount, 2, '.', '');
             $rka->total_view = number_format($amount, 2, '.', ',');
             $rka->total_terbilang = $this->spell((int)floor($amount));
+        }
+    }
+
+    private function validateAncestry(Rka $rka): void
+    {
+        if ($rka->parent_id === null) return;
+
+        $id = (int)$rka->parent_id;
+        $visited = [];
+        while ($id > 0) {
+            if (isset($visited[$id]) || count($visited) >= 100 ||
+                ($rka->exists && (int)$rka->id === $id)) {
+                throw ValidationException::withMessages([
+                    'parent_id' => 'Hierarki RKA tidak boleh membentuk siklus atau terlalu dalam.',
+                ]);
+            }
+            $visited[$id] = true;
+            $parent = Rka::query()->find($id);
+            if (!$parent || !(bool)$parent->is_parent) {
+                throw ValidationException::withMessages([
+                    'parent_id' => 'Induk RKA tidak tersedia atau bukan anggaran induk.',
+                ]);
+            }
+            if ((string)$parent->unit_nama !== (string)$rka->unit_nama) {
+                throw ValidationException::withMessages([
+                    'parent_id' => 'Induk dan anak RKA harus berada pada unit legacy yang sama.',
+                ]);
+            }
+            $id = $parent->parent_id === null ? 0 : (int)$parent->parent_id;
         }
     }
 
