@@ -357,8 +357,20 @@
                         <summary class="font-semibold cursor-pointer">KPI Budget — Pratinjau Sebelum Sharing Budget</summary>
                         <form wire:submit.prevent="saveKpiProfile" class="space-y-2 mt-3">
                             <label class="text-sm font-medium block">Kategori pendapatan dan biaya untuk siklus ini</label>
-                            <p class="text-xs text-gray-500">Daftar kategori ditentukan oleh organisasi. Format: {"income_categories":["REV"],"expense_categories":["COST"],"sharing_already_in_expense":false,"excluded_income_categories":["SPECIAL"]}. Kode di atas hanya ilustrasi sintaks, bukan aturan organisasi. Penandaan sharing wajib sebelum closing.</p>
-                            <textarea wire:model.defer="kpiProfileJson" rows="3" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
+                            <p class="text-xs text-gray-500">Gunakan kode kategori yang berlaku di organisasi Anda, pisahkan dengan koma. Profil baru dapat disimpan sebelum anggaran disetujui.</p>
+                            <div class="grid md:grid-cols-2 gap-3">
+                                <div><label class="block text-xs mb-1">Kategori pendapatan</label><input wire:model.defer="kpiIncomeCategories" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Contoh: TUITION, GRANT" /></div>
+                                <div><label class="block text-xs mb-1">Kategori biaya</label><input wire:model.defer="kpiExpenseCategories" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Contoh: SALARY, OPERATIONS" /></div>
+                                <div><label class="block text-xs mb-1">Pendapatan yang dikecualikan (opsional)</label><input wire:model.defer="kpiExcludedIncomeCategories" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Harus termasuk kategori pendapatan" /></div>
+                                <label class="flex items-center gap-2 text-sm"><input type="checkbox" wire:model.defer="kpiSharingAlreadyInExpense" /> Biaya bersama sudah tercakup dalam kategori biaya</label>
+                            </div>
+                            <details class="border dark:border-gray-600 rounded-lg p-3">
+                                <summary class="cursor-pointer text-xs">Pengaturan lanjutan (JSON, opsional)</summary>
+                                <label class="flex gap-2 items-center mt-3 text-sm"><input type="checkbox" wire:model="kpiAdvanced" /> Gunakan format JSON saat menyimpan</label>
+                                @if($kpiAdvanced)
+                                    <textarea wire:model.defer="kpiProfileJson" rows="4" class="w-full border rounded-lg p-2 mt-3 font-mono text-xs dark:bg-gray-900"></textarea>
+                                @endif
+                            </details>
                             <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Simpan Profil KPI</button>
                         </form>
                         @if($kpiPreview)

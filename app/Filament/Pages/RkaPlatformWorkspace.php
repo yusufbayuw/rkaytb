@@ -100,6 +100,11 @@ class RkaPlatformWorkspace extends Page
     public ?int $legacyUnitId = null;
     public array $legacyPreview = [];
     public string $kpiProfileJson = '{"income_categories":[],"expense_categories":[]}';
+    public string $kpiIncomeCategories = '';
+    public string $kpiExpenseCategories = '';
+    public string $kpiExcludedIncomeCategories = '';
+    public bool $kpiSharingAlreadyInExpense = false;
+    public bool $kpiAdvanced = false;
     public ?int $memberUnitId = null;
     public string $mappingSource = 'primary';
     public string $mappingAccount = '';
@@ -308,8 +313,13 @@ class RkaPlatformWorkspace extends Page
     {
         if (!$this->organizationId || !$this->cycleId) return;
         $cycle = Cycle::where('organization_id', $this->orgId())->find($this->cycleId);
-        $this->kpiProfileJson = json_encode(($cycle?->settings ?? [])['kpi_profile'] ??
-            ['income_categories' => [], 'expense_categories' => []], JSON_UNESCAPED_UNICODE);
+        $profile = ($cycle?->settings ?? [])['kpi_profile'] ??
+            ['income_categories' => [], 'expense_categories' => []];
+        $this->kpiProfileJson = json_encode($profile, JSON_UNESCAPED_UNICODE);
+        $this->kpiIncomeCategories = implode(', ', $profile['income_categories'] ?? []);
+        $this->kpiExpenseCategories = implode(', ', $profile['expense_categories'] ?? []);
+        $this->kpiExcludedIncomeCategories = implode(', ', $profile['excluded_income_categories'] ?? []);
+        $this->kpiSharingAlreadyInExpense = (bool)($profile['sharing_already_in_expense'] ?? false);
         $this->cycleCloseRisk = ($cycle?->settings ?? [])['close_risk'] ?? 'normal';
     }
 
@@ -317,13 +327,26 @@ class RkaPlatformWorkspace extends Page
     {
         $this->access()->requireRole($this->orgId(), (int)auth()->id(), ['owner','admin','finance']);
         $cycle = $this->cycle();
-        try {
-            $profile = json_decode($this->kpiProfileJson, true, 512, JSON_THROW_ON_ERROR);
-        } catch (\JsonException $e) {
-            throw ValidationException::withMessages(['kpiProfileJson' => 'Format profil harus JSON yang valid.']);
-        }
-        if (!is_array($profile)) {
-            throw ValidationException::withMessages(['kpiProfileJson' => 'Profil KPI harus berupa objek JSON.']);
+        if ($this->kpiAdvanced) {
+            try {
+                $profile = json_decode($this->kpiProfileJson, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException $e) {
+                throw ValidationException::withMessages(['kpiProfileJson' => 'Format profil harus JSON yang valid.']);
+            }
+            if (!is_array($profile)) {
+                throw ValidationException::withMessages(['kpiProfileJson' => 'Profil KPI harus berupa objek JSON.']);
+            }
+        } else {
+            $codes = static fn (string $text): array => array_values(array_filter(
+                array_map('trim', preg_split('/[,;\r\n]+/', $text)),
+                static fn ($value) => $value !== ''
+            ));
+            $profile = [
+                'income_categories' => $codes($this->kpiIncomeCategories),
+                'expense_categories' => $codes($this->kpiExpenseCategories),
+                'excluded_income_categories' => $codes($this->kpiExcludedIncomeCategories),
+                'sharing_already_in_expense' => $this->kpiSharingAlreadyInExpense,
+            ];
         }
         app(\App\Services\RkaPlatform\KpiBudgetPreviewService::class)->validateProfile($profile);
         if ($cycle->status !== 'draft' || BudgetLine::where('organization_id', $cycle->organization_id)
@@ -331,6 +354,11 @@ class RkaPlatformWorkspace extends Page
             throw ValidationException::withMessages(['kpiProfileJson' => 'Profil dikunci setelah anggaran disetujui.']);
         }
         $cycle->update(['settings' => array_merge($cycle->settings ?? [], ['kpi_profile' => $profile])]);
+        $this->kpiProfileJson = json_encode($profile, JSON_UNESCAPED_UNICODE);
+        $this->kpiIncomeCategories = implode(', ', $profile['income_categories']);
+        $this->kpiExpenseCategories = implode(', ', $profile['expense_categories']);
+        $this->kpiExcludedIncomeCategories = implode(', ', $profile['excluded_income_categories'] ?? []);
+        $this->kpiSharingAlreadyInExpense = (bool)($profile['sharing_already_in_expense'] ?? false);
         $this->audit()->record($cycle->organization_id, (int)auth()->id(), 'kpi_profile.updated', 'cycle', $cycle->id);
         $this->prepareFinancialDraft();
         $this->notify('success', 'Profil KPI disimpan untuk siklus ini.');
