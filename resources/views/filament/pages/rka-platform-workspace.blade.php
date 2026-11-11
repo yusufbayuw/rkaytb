@@ -203,11 +203,24 @@
                                 <input wire:model.defer="questionCode" placeholder="Kode pertanyaan" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
                                 <textarea wire:model.defer="questionText" rows="3" placeholder="Pertanyaan" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
                                 <input wire:model.defer="questionDomain" placeholder="Domain substansi" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                                <input wire:model.defer="questionOwnerRole" placeholder="Jabatan pemilik substansi" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                                <label class="text-xs">Rules JSON (opsional)</label>
-                                <textarea wire:model.defer="questionRulesJson" rows="2" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
-                                <label class="text-xs">Kebijakan bukti JSON (opsional)</label>
-                                <textarea wire:model.defer="questionEvidenceJson" rows="2" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
+                                <label class="block text-xs">Penanggung jawab substansi</label>
+                                <select wire:model.defer="questionOwnerRole" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                    <option value="owner">Pemilik Organisasi</option>
+                                    @foreach($assignableRoles as $code => $label)
+                                        <option value="{{ $code }}">{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                                <label class="flex items-center gap-2 text-sm"><input type="checkbox" wire:model.defer="questionEvidenceRequired" /> Jawaban wajib disertai bukti yang diverifikasi</label>
+                                <details class="border dark:border-gray-600 rounded-lg p-3">
+                                    <summary class="cursor-pointer text-xs">Aturan lanjutan (opsional)</summary>
+                                    <label class="flex gap-2 mt-3 text-sm"><input type="checkbox" wire:model="questionAdvanced" /> Aktifkan aturan berbasis JSON</label>
+                                    @if($questionAdvanced)
+                                        <label class="block text-xs mt-3">Aturan relevansi pertanyaan</label>
+                                        <textarea wire:model.defer="questionRulesJson" rows="3" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
+                                        <label class="block text-xs mt-3">Kebijakan bukti</label>
+                                        <textarea wire:model.defer="questionEvidenceJson" rows="3" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
+                                    @endif
+                                </details>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Simpan Pertanyaan</button>
                             </form>
                             <form wire:submit.prevent="createInstance" class="space-y-2">
@@ -234,8 +247,10 @@
                                     <option value="">Pilih reviewer</option>
                                     @foreach($users as $user)<option value="{{ $user->id }}">{{ $user->name }}</option>@endforeach
                                 </select>
-                                <label class="text-xs">Konteks aturan JSON (opsional)</label>
-                                <textarea wire:model.defer="questionContextJson" rows="2" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
+                                <details class="border dark:border-gray-600 rounded-lg p-3">
+                                    <summary class="cursor-pointer text-xs">Konteks aturan lanjutan (opsional)</summary>
+                                    <textarea wire:model.defer="questionContextJson" rows="3" class="w-full border rounded-lg p-2 mt-3 font-mono text-xs dark:bg-gray-900"></textarea>
+                                </details>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Buat Penugasan</button>
                             </form>
                         </div>

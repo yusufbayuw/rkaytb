@@ -59,6 +59,8 @@ class RkaPlatformWorkspace extends Page
     public string $questionOwnerRole = 'reviewer';
     public string $questionRulesJson = '{}';
     public string $questionEvidenceJson = '{}';
+    public bool $questionEvidenceRequired = false;
+    public bool $questionAdvanced = false;
     public ?int $newQuestionId = null;
     public ?int $newOwnerUserId = null;
     public ?int $newReviewerUserId = null;
@@ -371,12 +373,24 @@ class RkaPlatformWorkspace extends Page
             'cycleName' => 'required|max:160', 'cycleYear' => 'required|integer|between:2000,2100',
             'cycleStart' => 'required|date', 'cycleEnd' => 'required|date|after:cycleStart',
         ]);
+        // Carry forward only validated, editable KPI category definitions.
+        // Journal mappings, approvals, and financial decisions must never be inherited as approved.
+        $settings = ['sharing_unit_approval_policy' => 'impact_based'];
+        $previous = Cycle::where('organization_id', $this->orgId())
+            ->where('year', '<', (int)$this->cycleYear)->orderByDesc('year')->first();
+        $oldProfile = ($previous?->settings ?? [])['kpi_profile'] ?? null;
+        if (is_array($oldProfile)) {
+            try {
+                app(\App\Services\RkaPlatform\KpiBudgetPreviewService::class)->validateProfile($oldProfile);
+                $settings['kpi_profile'] = $oldProfile;
+            } catch (ValidationException $exception) {
+                // A historical invalid profile cannot prevent a new cycle from being created.
+            }
+        }
         $cycle = Cycle::create([
             'organization_id' => $this->orgId(), 'name' => $this->cycleName, 'year' => $this->cycleYear,
             'starts_on' => $this->cycleStart, 'ends_on' => $this->cycleEnd,
-            // New cycles use independently approved, impact-sensitive review decisions.
-            // Historic cycles retain their own approval contracts.
-            'settings' => ['sharing_unit_approval_policy' => 'impact_based'],
+            'settings' => $settings,
         ]);
         $this->cycleId = $cycle->id;
         $this->loadKpiProfile();
@@ -409,14 +423,19 @@ class RkaPlatformWorkspace extends Page
             'questionDomain' => 'required|string|max:80',
             'questionOwnerRole' => 'required|string|max:80',
         ]);
-        try {
-            $rules = json_decode($this->questionRulesJson, true, 512, JSON_THROW_ON_ERROR);
-            $evidence = json_decode($this->questionEvidenceJson, true, 512, JSON_THROW_ON_ERROR);
-        } catch (\JsonException $e) {
-            throw ValidationException::withMessages(['questionRulesJson' => 'Format JSON pertanyaan tidak valid.']);
-        }
-        if (!is_array($rules) || !is_array($evidence)) {
-            throw ValidationException::withMessages(['questionRulesJson' => 'Aturan harus berupa objek JSON.']);
+        if ($this->questionAdvanced) {
+            try {
+                $rules = json_decode($this->questionRulesJson, true, 512, JSON_THROW_ON_ERROR);
+                $evidence = json_decode($this->questionEvidenceJson, true, 512, JSON_THROW_ON_ERROR);
+            } catch (\JsonException $e) {
+                throw ValidationException::withMessages(['questionRulesJson' => 'Format JSON pertanyaan tidak valid.']);
+            }
+            if (!is_array($rules) || !is_array($evidence)) {
+                throw ValidationException::withMessages(['questionRulesJson' => 'Aturan harus berupa objek JSON.']);
+            }
+        } else {
+            $rules = [];
+            $evidence = ['required' => $this->questionEvidenceRequired];
         }
         app(QuestionRules::class)->applies($rules, []);
         $question = Question::create([
