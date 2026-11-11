@@ -12,7 +12,7 @@ use App\Services\RkaPlatform\{
     TenantAccess, AuditTrail, ContributionService, QuestionRules,
     SharedCostAllocator, JournalSpreadsheetImporter, BookPublishingService, FinancialApprovalService,
     EvidenceService, FinancialReconciliationService, FinancialClosingService,
-    MaterialityExceptionService, OrganizationRoleCatalog
+    MaterialityExceptionService, OrganizationRoleCatalog, SharingImpactGovernance
 };
 use Filament\Pages\Page;
 use Illuminate\Support\Facades\DB;
@@ -79,6 +79,14 @@ class RkaPlatformWorkspace extends Page
     public string $poolAmount = '';
     public string $poolMethod = 'equal';
     public array $poolDrivers = [];
+    public ?int $impactPoolId = null;
+    public string $impactChangeType = 'baseline';
+    public string $impactTier = 'approve';
+    public string $impactReason = '';
+    public ?string $impactDueAt = null;
+    public ?int $reviewEscalationPoolId = null;
+    public ?int $reviewEscalationUnitId = null;
+    public string $reviewEscalationReason = '';
     public string $templateName = '';
     public string $templateSections = '';
     public ?int $newTemplateId = null;
@@ -337,9 +345,9 @@ class RkaPlatformWorkspace extends Page
         $cycle = Cycle::create([
             'organization_id' => $this->orgId(), 'name' => $this->cycleName, 'year' => $this->cycleYear,
             'starts_on' => $this->cycleStart, 'ends_on' => $this->cycleEnd,
-            // New cycles require explicit consent from every affected cost-sharing unit.
-            // Historic cycles without this policy keep their existing approval contract.
-            'settings' => ['sharing_unit_approval_policy' => 'required'],
+            // New cycles use independently approved, impact-sensitive review decisions.
+            // Historic cycles retain their own approval contracts.
+            'settings' => ['sharing_unit_approval_policy' => 'impact_based'],
         ]);
         $this->cycleId = $cycle->id;
         $this->loadKpiProfile();
@@ -562,6 +570,63 @@ class RkaPlatformWorkspace extends Page
             ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
         app(FinancialApprovalService::class)->approvePool($pool, (int)auth()->id());
         $this->notify('success', 'Alokasi disetujui.');
+    }
+
+    public function proposeSharingImpact(): void
+    {
+        $this->access()->requireRole($this->orgId(), (int)auth()->id(), ['owner','admin','finance']);
+        $this->validate([
+            'impactPoolId' => 'required|integer',
+            'impactChangeType' => 'required|in:baseline,routine,parameters,transfer',
+            'impactTier' => 'required|in:inform,review,approve',
+            'impactReason' => 'required|string|min:20|max:3000',
+            'impactDueAt' => 'nullable|date',
+        ]);
+        $pool = SharedPool::where('organization_id',$this->orgId())
+            ->where('cycle_id',$this->cycle()->id)->findOrFail($this->impactPoolId);
+        app(SharingImpactGovernance::class)->propose($pool, (int)auth()->id(),
+            $this->impactChangeType, $this->impactTier, $this->impactReason, $this->impactDueAt);
+        $this->impactReason = '';
+        $this->notify('success', 'Penilaian dampak diajukan; penilai independen wajib mengesahkan.');
+    }
+
+    public function approveSharingImpact(int $id): void
+    {
+        $impact = DB::table('rka_shared_pool_impact_assessments')
+            ->where('organization_id',$this->orgId())->where('cycle_id',$this->cycle()->id)
+            ->where('id',$id)->first();
+        if (!$impact) abort(404);
+        $pool = SharedPool::where('organization_id',$this->orgId())
+            ->where('cycle_id',$this->cycle()->id)->findOrFail($impact->pool_id);
+        app(SharingImpactGovernance::class)->approveAssessment($pool, $id, (int)auth()->id());
+        $this->notify('success', 'Penilaian dampak telah disahkan.');
+    }
+
+    public function proposeSharingReviewEscalation(): void
+    {
+        $this->validate([
+            'reviewEscalationPoolId' => 'required|integer',
+            'reviewEscalationUnitId' => 'required|integer',
+            'reviewEscalationReason' => 'required|string|min:20|max:3000',
+        ]);
+        $pool = SharedPool::where('organization_id',$this->orgId())
+            ->where('cycle_id',$this->cycle()->id)->findOrFail($this->reviewEscalationPoolId);
+        app(SharingImpactGovernance::class)->proposeEscalation($pool,
+            $this->reviewEscalationUnitId, (int)auth()->id(), $this->reviewEscalationReason);
+        $this->reviewEscalationReason = '';
+        $this->notify('success', 'Eskalasi review diajukan; perlu pengesah independen.');
+    }
+
+    public function approveSharingReviewEscalation(int $id): void
+    {
+        $escalation = DB::table('rka_shared_pool_escalations')
+            ->where('organization_id',$this->orgId())->where('cycle_id',$this->cycle()->id)
+            ->where('id',$id)->first();
+        if (!$escalation) abort(404);
+        $pool = SharedPool::where('organization_id',$this->orgId())
+            ->where('cycle_id',$this->cycle()->id)->findOrFail($escalation->pool_id);
+        app(SharingImpactGovernance::class)->approveEscalation($pool,$id,(int)auth()->id());
+        $this->notify('success','Eskalasi disahkan dengan dua pengambil keputusan.');
     }
 
     public function consentSharedPool(int $id): void
@@ -877,6 +942,8 @@ class RkaPlatformWorkspace extends Page
             'closingPolicies' => collect(), 'cycleApprovals' => collect(),
             'cycleClosings' => collect(), 'sharingDisputes' => collect(), 'disputePools' => collect(),
             'unitConsentPools' => collect(), 'signedPoolIds' => [], 'requiresUnitConsent' => false, 'myUnitId' => null,
+            'impactAssessments' => collect(), 'reviewEscalations' => collect(),
+            'myImpactAssessmentByPool' => [],
             'canControlClose' => false, 'canRaiseDispute' => false, 'cycleCurrent' => null,
             'materialityPolicies' => collect(), 'materialityExceptions' => collect(),
             'unmappedBudgetLines' => collect(),
@@ -912,6 +979,14 @@ class RkaPlatformWorkspace extends Page
             $data['cycleCurrent'] = $cycle;
             $consentSvc = app(\App\Services\RkaPlatform\SharedPoolUnitConsentService::class);
             $data['requiresUnitConsent'] = $consentSvc->isRequired($cycle);
+            if (($cycle->settings['sharing_unit_approval_policy'] ?? '') === 'impact_based') {
+                $data['impactAssessments'] = DB::table('rka_shared_pool_impact_assessments')
+                    ->where('organization_id',$orgId)->where('cycle_id',$cycle->id)
+                    ->orderByDesc('id')->limit(30)->get();
+                $data['reviewEscalations'] = DB::table('rka_shared_pool_escalations')
+                    ->where('organization_id',$orgId)->where('cycle_id',$cycle->id)
+                    ->orderByDesc('id')->limit(30)->get();
+            }
             $membership = $this->access()->membership($orgId, (int)auth()->id());
             $data['myUnitId'] = $membership->unit_id;
             if ($data['requiresUnitConsent'] && in_array('unit_manager', $membership->roles ?? [], true)
@@ -921,6 +996,10 @@ class RkaPlatformWorkspace extends Page
                     ->where('cycle_id', $cycle->id)->orderBy('id')->get()
                     ->filter(fn ($pool) => array_key_exists((string)$unitId, $pool->allocations ?? [])
                         && (float)($pool->allocations[$unitId] ?? 0) > 0)->values();
+                foreach ($data['unitConsentPools'] as $pool) {
+                    $assessment = app(SharingImpactGovernance::class)->forPool($pool);
+                    $data['myImpactAssessmentByPool'][$pool->id] = $assessment;
+                }
                 $data['signedPoolIds'] = DB::table('rka_shared_pool_unit_consents')
                     ->where('organization_id', $orgId)->where('cycle_id', $cycle->id)
                     ->where('unit_id', $unitId)->get()->filter(function ($signature) use ($consentSvc, $data) {
