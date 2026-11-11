@@ -669,7 +669,7 @@
                             @foreach($unitConsentPools as $pool)
                                 <div class="border-b dark:border-gray-700 py-2 flex flex-wrap gap-2 items-center justify-between text-sm">
                                     <span>{{ $pool->name }} · Versi {{ $pool->version }} · Dibebankan {{ ($pool->allocations ?? [])[(string)$myUnitId] ?? '-' }} · {{ $pool->status }}</span>
-                                    @php($assessment = $myImpactAssessmentByPool[$pool->id] ?? null)
+                                    @php $assessment = $myImpactAssessmentByPool[$pool->id] ?? null; @endphp
                                     @if(($cycleCurrent->settings['sharing_unit_approval_policy'] ?? '') === 'impact_based' && (!$assessment || $assessment->status !== 'approved'))
                                         <span class="text-gray-500">Menunggu penilaian dampak independen</span>
                                     @elseif($assessment && $assessment->review_tier === 'inform')
