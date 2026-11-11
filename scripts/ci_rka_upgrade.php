@@ -15,7 +15,8 @@ $app->make(Kernel::class)->bootstrap();
 
 $connection = DB::getDefaultConnection();
 $database = (string) DB::connection()->getDatabaseName();
-$allowed = getenv('APP_ENV') === 'testing'
+$allowed = getenv('GITHUB_ACTIONS') === 'true' && getenv('CI') === 'true'
+    && getenv('APP_ENV') === 'testing'
     && (($connection === 'mysql' && $database === 'rka_test')
         || ($connection === 'sqlite' && basename($database) === 'ci_upgrade_test.sqlite'));
 if (!$allowed) {
