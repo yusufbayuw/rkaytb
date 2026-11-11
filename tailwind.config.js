@@ -2,7 +2,7 @@
 
 import colors from 'tailwindcss/colors' 
 import forms from '@tailwindcss/forms'
-import typography from '@tailwindcss/typograph'
+import typography from '@tailwindcss/typography'
 
 export default {
   content: [
