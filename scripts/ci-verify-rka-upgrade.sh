@@ -3,6 +3,10 @@ set -euo pipefail
 
 # Destructive operations are permitted only inside this isolated CI test DB.
 # Never run against production or a developer's existing business database.
+if [[ "${GITHUB_ACTIONS:-}" != "true" || "${CI:-}" != "true" ]]; then
+  echo "REFUSED: migration rehearsal is restricted to GitHub Actions CI" >&2
+  exit 2
+fi
 if [[ "$APP_ENV" != "testing" ]]; then
   echo "REFUSED: APP_ENV must be testing" >&2
   exit 2
