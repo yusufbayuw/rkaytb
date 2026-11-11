@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Rka;
+use App\Models\RkaGaji;
 use App\Models\Unit;
 use App\Models\User;
 use App\Models\RkaPlatform\{Organization, Membership};
@@ -186,6 +187,34 @@ class RkaPlatformLegacyFinanceRegressionTest extends TestCase
             $this->assertFalse($resource::canEdit($foreign), $resource.' edit must be scoped');
             $this->assertFalse($resource::canDelete($foreign), $resource.' delete must be scoped');
         }
+    }
+
+    public function test_payroll_list_is_scoped_to_legacy_unit_except_for_finance_roles(): void
+    {
+        $unitOne = Unit::create(['nama' => 'Human Resources A']);
+        $unitTwo = Unit::create(['nama' => 'Human Resources B']);
+        RkaGaji::create(['uraian'=>'Payroll A','unit_nama'=>(string)$unitOne->id,'total'=>'100.00']);
+        RkaGaji::create(['uraian'=>'Payroll B','unit_nama'=>(string)$unitTwo->id,'total'=>'200.00']);
+
+        $local = User::factory()->create(['unit_id'=>$unitOne->id]);
+        $this->actingAs($local);
+        $this->assertSame(
+            [(string)$unitOne->id],
+            RkaGajiResource::getEloquentQuery()->pluck('unit_nama')->all()
+        );
+
+        $finance = User::factory()->create(['unit_id'=>null]);
+        Role::findOrCreate('admin-keuangan','web');
+        $finance->assignRole('admin-keuangan');
+        $this->actingAs($finance);
+        $this->assertEqualsCanonicalizing(
+            [(string)$unitOne->id,(string)$unitTwo->id],
+            RkaGajiResource::getEloquentQuery()->pluck('unit_nama')->all()
+        );
+
+        $unassigned = User::factory()->create(['unit_id'=>null]);
+        $this->actingAs($unassigned);
+        $this->assertSame([],RkaGajiResource::getEloquentQuery()->pluck('unit_nama')->all());
     }
 
 }
