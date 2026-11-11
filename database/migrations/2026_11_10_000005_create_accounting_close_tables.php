@@ -87,7 +87,18 @@ return new class extends Migration {
     public function down(): void
     {
         Schema::dropIfExists('rka_cycle_closings');
-        // One column alteration per Blueprint for SQLite migration rollback.
+        if (Schema::getConnection()->getDriverName() === 'sqlite') {
+            // SQLite cannot DROP a foreign-key constraint without rebuilding the
+            // table. These three altered tables were created by the first
+            // platform migration (000001), not by legacy migrations. The
+            // supported SQLite rollback is the complete nine-migration bundle,
+            // which drops those tables when 000001 is rolled back.
+            Schema::dropIfExists('rka_sharing_disputes');
+            Schema::dropIfExists('rka_reconciliation_runs');
+            Schema::dropIfExists('rka_journal_account_mappings');
+            return;
+        }
+        // MySQL supports individually dropping these constraints/columns.
         // Combining several dropColumn calls fails in Laravel's SQLite grammar.
         Schema::table('rka_approval_requests', fn (Blueprint $t) =>
             $t->dropConstrainedForeignId('reconciliation_id'));
