@@ -510,10 +510,10 @@
                     </details>
                     <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Rekonsiliasi, Eliminasi Internal dan KPI Budget</summary>
-                        <p class="text-xs text-gray-500 mt-2">Laporan sementara memperlihatkan blocker tanpa menyembunyikannya. Jurnal tidak seimbang, akun belum terpetakan, clearing terbuka, dan pasangan pendapatan/beban internal yang tidak cocok menghentikan pengesahan.</p>
+                        <p class="text-xs text-gray-500 mt-2">Draf rekonsiliasi dibuat otomatis setelah perubahan data keuangan. Verifikasi wajib oleh pemeriksa independen. Laporan sementara memperlihatkan blocker tanpa menyembunyikannya. Jurnal tidak seimbang, akun belum terpetakan, clearing terbuka, dan pasangan pendapatan/beban internal yang tidak cocok menghentikan pengesahan.</p>
                         <div class="mt-4">
                             @if($cycleCurrent && $cycleCurrent->status === 'draft')
-                                <button type="button" wire:click="prepareReconciliation" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Hitung dan Simpan Rekonsiliasi Baru</button>
+                                <button type="button" wire:click="prepareReconciliation" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Hitung Ulang Manual (opsional)</button>
                             @endif
                         </div>
                         <div class="space-y-3 mt-4">

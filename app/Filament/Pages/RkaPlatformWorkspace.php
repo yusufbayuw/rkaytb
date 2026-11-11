@@ -332,6 +332,7 @@ class RkaPlatformWorkspace extends Page
         }
         $cycle->update(['settings' => array_merge($cycle->settings ?? [], ['kpi_profile' => $profile])]);
         $this->audit()->record($cycle->organization_id, (int)auth()->id(), 'kpi_profile.updated', 'cycle', $cycle->id);
+        $this->prepareFinancialDraft();
         $this->notify('success', 'Profil KPI disimpan untuk siklus ini.');
     }
 
@@ -518,6 +519,18 @@ class RkaPlatformWorkspace extends Page
         $this->notify('success', 'Sintesis diverifikasi.');
     }
 
+    /** Financial edits are committed before optional draft preparation. */
+    private function prepareFinancialDraft(): void
+    {
+        try {
+            app(FinancialReconciliationService::class)->prepareIfChanged(
+                $this->cycle(), (int) auth()->id()
+            );
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
+    }
+
     public function addBudget(): void
     {
         $this->access()->requireRole($this->orgId(), (int)auth()->id(), ['owner','admin','finance']);
@@ -534,6 +547,7 @@ class RkaPlatformWorkspace extends Page
         ]);
         $this->audit()->record($this->orgId(), (int)auth()->id(), 'budget.created', 'budget_line', $line->id);
         $this->lineName = $this->lineAmount = '';
+        $this->prepareFinancialDraft();
         $this->notify('success', 'Baris anggaran draft dibuat.');
     }
 
@@ -555,6 +569,7 @@ class RkaPlatformWorkspace extends Page
         app(SharedCostAllocator::class)->saveDraft($pool, (int)auth()->id(), $this->access(), $this->audit());
         $this->poolName = $this->poolCode = $this->poolAmount = '';
         $this->poolDrivers = [];
+        $this->prepareFinancialDraft();
         $this->notify('success', 'Alokasi draft dihitung.');
     }
 
@@ -563,6 +578,7 @@ class RkaPlatformWorkspace extends Page
         $line = BudgetLine::query()->where('organization_id', $this->orgId())
             ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
         app(FinancialApprovalService::class)->approveBudget($line, (int)auth()->id());
+        $this->prepareFinancialDraft();
         $this->notify('success', 'Anggaran disetujui.');
     }
 
@@ -571,6 +587,7 @@ class RkaPlatformWorkspace extends Page
         $pool = SharedPool::query()->where('organization_id', $this->orgId())
             ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
         app(FinancialApprovalService::class)->approvePool($pool, (int)auth()->id());
+        $this->prepareFinancialDraft();
         $this->notify('success', 'Alokasi disetujui.');
     }
 
@@ -653,6 +670,7 @@ class RkaPlatformWorkspace extends Page
             $this->orgId(), (int)auth()->id(), $this->journalFile, $this->journalSource, $mapping
         );
         $this->journalFile = null;
+        $this->prepareFinancialDraft();
         $this->notify('success', 'Batch XLSX diterima: '.$batch->id.' (status staged).');
     }
 
@@ -680,6 +698,7 @@ class RkaPlatformWorkspace extends Page
             ->where('cycle_id', $this->cycle()->id)->where('id',$id)->first();
         if (!$row) abort(404);
         app(FinancialReconciliationService::class)->approveMapping($this->orgId(), $id, (int)auth()->id());
+        $this->prepareFinancialDraft();
         $this->notify('success', 'Mapping diaktifkan.');
     }
 
@@ -687,7 +706,8 @@ class RkaPlatformWorkspace extends Page
     {
         $batch = JournalBatch::where('organization_id', $this->orgId())->findOrFail($id);
         app(FinancialReconciliationService::class)->verifyBatch($batch, (int)auth()->id());
-        $this->notify('success', 'Integritas sumber batch diverifikasi. Rekonsiliasi tetap diperlukan.');
+        $this->prepareFinancialDraft();
+        $this->notify('success', 'Integritas sumber batch diverifikasi; draf rekonsiliasi disiapkan otomatis.');
     }
 
     public function prepareReconciliation(): void
@@ -722,7 +742,8 @@ class RkaPlatformWorkspace extends Page
             $this->audit()->record($locked->organization_id, (int)auth()->id(),
                 'cycle.closing_risk_updated', 'cycle', $locked->id, ['risk' => $this->cycleCloseRisk]);
         });
-        $this->notify('success', 'Risiko closing disimpan. Rekonsiliasi harus dihitung ulang bila telah disiapkan.');
+        $this->prepareFinancialDraft();
+        $this->notify('success', 'Risiko closing disimpan; draf rekonsiliasi diperbarui otomatis.');
     }
 
     public function proposeClosingPolicy(): void

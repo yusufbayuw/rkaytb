@@ -415,6 +415,40 @@ class FinancialReconciliationService
         });
     }
 
+    /**
+     * Idempotent automatic preparation. A draft is prepared only for new source
+     * hashes; no financial approval or verification is ever inferred.
+     */
+    public function prepareIfChanged(Cycle $cycle, int $actor): int
+    {
+        $this->access->requireRole($cycle->organization_id, $actor, ['owner', 'admin', 'finance']);
+        return DB::transaction(function () use ($cycle, $actor) {
+            $locked = Cycle::where('organization_id', $cycle->organization_id)
+                ->whereKey($cycle->id)->lockForUpdate()->firstOrFail();
+            $this->assertMutable($locked);
+            $calculated = $this->calculate($locked);
+            $previous = DB::table('rka_reconciliation_runs')
+                ->where('organization_id', $locked->organization_id)
+                ->where('cycle_id', $locked->id)->orderByDesc('version')->first();
+            if ($previous && hash_equals($previous->source_hash, $calculated['source_hash'])) {
+                return (int)$previous->id;
+            }
+            $version = $previous ? (int)$previous->version + 1 : 1;
+            $id = DB::table('rka_reconciliation_runs')->insertGetId([
+                'organization_id' => $locked->organization_id,
+                'cycle_id' => $locked->id,
+                'version' => $version, 'status' => 'draft',
+                'source_hash' => $calculated['source_hash'],
+                'report' => json_encode($calculated['report'], JSON_THROW_ON_ERROR),
+                'prepared_by' => $actor, 'created_at' => now(), 'updated_at' => now(),
+            ]);
+            $this->audit->record($locked->organization_id, $actor,
+                'reconciliation.auto_prepared', 'reconciliation', $id,
+                ['version' => $version, 'blockers' => $calculated['report']['blocker_count']]);
+            return $id;
+        });
+    }
+
     public function verify(Cycle $cycle, int $runId, int $actor): void
     {
         $this->access->requireRole($cycle->organization_id, $actor, ['owner','admin','finance']);
