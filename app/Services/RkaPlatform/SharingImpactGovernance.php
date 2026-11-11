@@ -31,12 +31,51 @@ class SharingImpactGovernance
             ->first();
     }
 
+    private function previousApprovedBaseline(SharedPool $pool, Cycle $cycle): ?SharedPool
+    {
+        return SharedPool::query()->join('rka_cycles as historical_cycle',
+                'historical_cycle.id', '=', 'rka_shared_pools.cycle_id')
+            ->where('rka_shared_pools.organization_id', $pool->organization_id)
+            ->where('rka_shared_pools.code', $pool->code)
+            ->where('rka_shared_pools.status', 'approved')
+            ->where('historical_cycle.status', 'closed')
+            ->whereDate('historical_cycle.ends_on', '<', $cycle->starts_on->format('Y-m-d'))
+            ->orderByDesc('historical_cycle.ends_on')
+            ->select('rka_shared_pools.*')->first();
+    }
+
+    private function recipientIds(SharedPool $pool): array
+    {
+        $ids = [];
+        foreach ($pool->allocations ?? [] as $id => $amount) {
+            if ($this->units->allocationHash($pool) && (float)$amount > 0) $ids[] = (int)$id;
+        }
+        sort($ids);
+        return $ids;
+    }
+
+    private function normalizedDrivers(SharedPool $pool): array
+    {
+        $items = $pool->drivers ?? [];
+        ksort($items, SORT_NUMERIC);
+        return array_map(fn ($value) => (string)(float)$value, $items);
+    }
+
     public function approved(SharedPool $pool): object
     {
         $assessment = $this->forPool($pool);
         if (!$assessment || $assessment->status !== 'approved' || !$assessment->reviewed_by ||
             $assessment->prepared_by === $assessment->reviewed_by) {
             $this->fail('Penilaian dampak independen untuk versi alokasi ini belum disahkan.');
+        }
+        if ($assessment->change_type !== 'baseline') {
+            $cycle = Cycle::where('organization_id',$pool->organization_id)
+                ->whereKey($pool->cycle_id)->firstOrFail();
+            $baseline = $this->previousApprovedBaseline($pool, $cycle);
+            if (!$baseline || (int)$baseline->id !== (int)$assessment->baseline_pool_id ||
+                $this->units->allocationHash($baseline) !== $assessment->baseline_hash) {
+                $this->fail('Baseline sumber untuk klasifikasi dampak berubah atau tidak lagi sah.');
+            }
         }
         return $assessment;
     }
@@ -71,6 +110,21 @@ class SharingImpactGovernance
             }
             // Invalid recipients, amounts or weights cannot be hidden behind a risk label.
             $this->units->affectedUnitIds($locked);
+            $baseline = $this->previousApprovedBaseline($locked, $cycle);
+            if ($changeType !== 'baseline' && !$baseline) {
+                $this->fail('Tidak ada baseline pool dari siklus terdahulu yang ditutup; klasifikasi wajib baseline dengan persetujuan semua unit.');
+            }
+            if ($baseline && $changeType === 'routine') {
+                if ($baseline->method !== $locked->method ||
+                    $this->normalizedDrivers($baseline) !== $this->normalizedDrivers($locked) ||
+                    $this->recipientIds($baseline) !== $this->recipientIds($locked)) {
+                    $this->fail('Rutin hanya berlaku ketika metode, bobot, dan penerima sama dengan baseline resmi.');
+                }
+            }
+            if ($baseline && $changeType === 'parameters' &&
+                $this->recipientIds($baseline) !== $this->recipientIds($locked)) {
+                $this->fail('Perubahan unit penerima adalah pemindahan tanggung jawab dan wajib approval formal.');
+            }
             if (DB::table('rka_shared_pool_impact_assessments')->where('pool_id',$locked->id)
                 ->where('pool_version',$locked->version)->exists()) {
                 $this->fail('Penilaian dampak untuk versi ini sudah diajukan; hitung ulang alokasi untuk revisi.');
@@ -79,6 +133,8 @@ class SharingImpactGovernance
                 'organization_id' => $locked->organization_id, 'cycle_id' => $locked->cycle_id,
                 'pool_id' => $locked->id, 'pool_version' => $locked->version,
                 'allocation_hash' => $this->units->allocationHash($locked),
+                'baseline_pool_id' => $baseline?->id,
+                'baseline_hash' => $baseline ? $this->units->allocationHash($baseline) : null,
                 'change_type' => $changeType, 'review_tier' => $tier, 'reason' => trim($reason),
                 'response_due_at' => $dueAt ? Carbon::parse($dueAt) : null,
                 'prepared_by' => $actor, 'status' => 'draft',
@@ -113,6 +169,13 @@ class SharingImpactGovernance
                 throw new AuthorizationException('Penilai independen tidak boleh menjadi pembuat alokasi atau pengusul klasifikasi.');
             }
             $this->units->affectedUnitIds($locked);
+            if ($row->change_type !== 'baseline') {
+                $baseline = $this->previousApprovedBaseline($locked, $cycle);
+                if (!$baseline || (int)$baseline->id !== (int)$row->baseline_pool_id ||
+                    $this->units->allocationHash($baseline) !== $row->baseline_hash) {
+                    $this->fail('Baseline berubah; wajib lakukan penilaian ulang.');
+                }
+            }
             DB::table('rka_shared_pool_impact_assessments')->where('id',$row->id)->update([
                 'status'=>'approved','reviewed_by'=>$actor,'reviewed_at'=>now(),'updated_at'=>now(),
             ]);
