@@ -87,15 +87,22 @@ return new class extends Migration {
     public function down(): void
     {
         Schema::dropIfExists('rka_cycle_closings');
-        Schema::table('rka_approval_requests', function (Blueprint $t) {
-            $t->dropConstrainedForeignId('reconciliation_id');
-            $t->dropColumn(['reason','source_hash']);
-        });
-        Schema::table('rka_approval_policies', function (Blueprint $t) {
-            $t->dropConstrainedForeignId('activated_by');
-            $t->dropConstrainedForeignId('created_by');
-            $t->dropColumn(['activated_at','version']);
-        });
+        // One column alteration per Blueprint for SQLite migration rollback.
+        // Combining several dropColumn calls fails in Laravel's SQLite grammar.
+        Schema::table('rka_approval_requests', fn (Blueprint $t) =>
+            $t->dropConstrainedForeignId('reconciliation_id'));
+        Schema::table('rka_approval_requests', fn (Blueprint $t) =>
+            $t->dropColumn('reason'));
+        Schema::table('rka_approval_requests', fn (Blueprint $t) =>
+            $t->dropColumn('source_hash'));
+        Schema::table('rka_approval_policies', fn (Blueprint $t) =>
+            $t->dropConstrainedForeignId('activated_by'));
+        Schema::table('rka_approval_policies', fn (Blueprint $t) =>
+            $t->dropConstrainedForeignId('created_by'));
+        Schema::table('rka_approval_policies', fn (Blueprint $t) =>
+            $t->dropColumn('activated_at'));
+        Schema::table('rka_approval_policies', fn (Blueprint $t) =>
+            $t->dropColumn('version'));
         Schema::dropIfExists('rka_sharing_disputes');
         Schema::dropIfExists('rka_reconciliation_runs');
         Schema::dropIfExists('rka_journal_account_mappings');
