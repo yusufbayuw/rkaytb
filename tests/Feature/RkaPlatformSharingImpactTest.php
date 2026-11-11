@@ -246,4 +246,42 @@ class RkaPlatformSharingImpactTest extends TestCase
         }
     }
 
+    public function test_large_routine_cost_change_cannot_be_treated_as_information_only(): void
+    {
+        $f = $this->fixture();
+        $f['pool']->update(['amount' => '12000.00']);
+        app(SharedCostAllocator::class)->saveDraft(
+            $f['pool'], $f['maker']->id, app(TenantAccess::class), app(AuditTrail::class)
+        );
+        $this->expectException(ValidationException::class);
+        app(SharingImpactGovernance::class)->propose(
+            $f['pool']->fresh(), $f['maker']->id, 'routine', 'inform',
+            'Attempt to classify a one-hundred-fold cost increase as information only.'
+        );
+    }
+
+    public function test_small_changed_routine_cost_still_requires_unit_review_or_approval(): void
+    {
+        $f = $this->fixture();
+        $f['pool']->update(['amount' => '120.01']);
+        app(SharedCostAllocator::class)->saveDraft(
+            $f['pool'], $f['maker']->id, app(TenantAccess::class), app(AuditTrail::class)
+        );
+        try {
+            app(SharingImpactGovernance::class)->propose(
+                $f['pool']->fresh(), $f['maker']->id, 'routine', 'inform',
+                'Even minor differences require explicit review in the absence of limits.'
+            );
+            $this->fail('Changed unit amounts may not silently downgrade to information.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('impact', $e->errors());
+        }
+        $case = app(SharingImpactGovernance::class)->propose(
+            $f['pool']->fresh(), $f['maker']->id, 'routine', 'review',
+            'A small cost variance must be reviewed and acknowledged by affected units.',
+            now()->addDays(2)->toDateTimeString()
+        );
+        $this->assertNotNull(DB::table('rka_shared_pool_impact_assessments')->find($case));
+    }
+
 }
