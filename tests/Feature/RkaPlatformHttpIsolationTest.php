@@ -43,8 +43,14 @@ class RkaPlatformHttpIsolationTest extends TestCase
         ]);
         $path='private/rka-evidence/'.$first->id.'/'.$instance->id.'/source.pdf';
         Storage::disk('local')->put($path, '%PDF-1.4 test data');
+        $answer=\App\Models\RkaPlatform\Answer::create([
+            'organization_id'=>$first->id,'instance_id'=>$instance->id,
+            'author_id'=>$owner->id,'revision'=>1,
+            'content'=>'Scoped source explanation.','status'=>'submitted',
+        ]);
         $evidence=EvidenceRecord::create([
             'organization_id'=>$first->id,'instance_id'=>$instance->id,
+            'answer_id'=>$answer->id,
             'uploaded_by'=>$owner->id,'original_name'=>'source.pdf',
             'storage_path'=>$path,'mime_type'=>'application/pdf',
             'sha256'=>str_repeat('a',64),'status'=>'verified',
