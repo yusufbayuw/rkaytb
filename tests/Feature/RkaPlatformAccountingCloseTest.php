@@ -283,4 +283,102 @@ class RkaPlatformAccountingCloseTest extends TestCase
         $this->assertSame($policy->id, $request->steps_snapshot['policy_id']);
     }
 
+
+    public function test_full_finance_to_published_book_flow_uses_one_frozen_source_for_all_exports(): void
+    {
+        $f = $this->fixture();
+        $recon = app(FinancialReconciliationService::class);
+        $run = $recon->prepare($f['cycle'], $f['author']->id);
+        $recon->verify($f['cycle'], $run, $f['checker']->id);
+        $this->policies($f);
+
+        $closing = app(FinancialClosingService::class);
+        $request = $closing->request($f['cycle'], $f['submitter']->id,
+            'cycle.close', 'Reconciled and independently validated for official annual publication.');
+        $closing->decide($request, $f['approverOne']->id, true);
+        $closing->decide($request, $f['approverTwo']->id, true);
+        $this->assertSame('closed',$f['cycle']->fresh()->status);
+
+        $template = BookTemplate::create([
+            'organization_id'=>$f['org']->id,'name'=>'Generic book template',
+            'sections'=>[
+                ['code'=>'story','title'=>'Strategy','required'=>true,'block_type'=>'narrative'],
+                ['code'=>'finance','title'=>'Financial Statement','required'=>true,'block_type'=>'consolidated'],
+                ['code'=>'kpi','title'=>'Unit Performance','required'=>true,'block_type'=>'unit_kpi'],
+            ],
+        ]);
+        $book = Book::create([
+            'organization_id'=>$f['org']->id,'cycle_id'=>$f['cycle']->id,
+            'template_id'=>$template->id,'title'=>'Generic Published Annual Budget',
+        ]);
+        $story=BookSection::create([
+            'book_id'=>$book->id,'code'=>'story','title'=>'Strategy',
+            'block_type'=>'narrative','required'=>true,'status'=>'draft','position'=>0,
+        ]);
+        $statement=BookSection::create([
+            'book_id'=>$book->id,'code'=>'finance','title'=>'Financial Statement',
+            'block_type'=>'consolidated','required'=>true,'status'=>'review','position'=>1,
+        ]);
+        $kpi=BookSection::create([
+            'book_id'=>$book->id,'code'=>'kpi','title'=>'Unit Performance',
+            'block_type'=>'unit_kpi','required'=>true,'status'=>'review','position'=>2,
+        ]);
+        $svc=app(BookPublishingService::class);
+        $svc->saveSection($story,$f['admin']->id,'Narrative reviewed against the closed accounts.');
+        $svc->approveSection($story->fresh(),$f['checker']->id);
+        $svc->approveSection($statement,$f['checker']->id);
+        $svc->approveSection($kpi,$f['checker']->id);
+        config()->set('rka_platform.enable_official_publication',true);
+        $published=$svc->publish($book->fresh(),$f['owner']->id);
+        $this->assertSame('published',$published->status);
+
+        $snapshot=$published->snapshot;
+        $actualClosing=DB::table('rka_cycle_closings')->where('cycle_id',$f['cycle']->id)->first();
+        $this->assertSame($actualClosing->source_hash,$snapshot['closing']['source_hash']);
+        $this->assertSame('300.00',$snapshot['financial_report']['consolidated']['surplus']);
+        $this->assertSame('consolidated',$snapshot['sections'][1]['block_type']);
+
+        $this->actingAs($f['owner']);
+        foreach ([
+            'pdf'=>'application/pdf',
+            'docx'=>'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'xlsx'=>'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ] as $format=>$mime) {
+            $this->get(route('rka-platform.books.download',[$published,$format]))
+                ->assertOk()->assertHeader('Content-Type',$mime);
+        }
+
+        // Exports must not mutate or recompute the signed financial snapshot.
+        $this->assertSame($snapshot['sha256'],$published->fresh()->snapshot['sha256']);
+        $this->assertSame($actualClosing->report_hash,
+            DB::table('rka_cycle_closings')->whereKey($actualClosing->id)->value('report_hash'));
+    }
+
+    public function test_financial_source_change_after_first_approval_blocks_final_closing(): void
+    {
+        $f=$this->fixture();
+        $recon=app(FinancialReconciliationService::class);
+        $run=$recon->prepare($f['cycle'],$f['author']->id);
+        $recon->verify($f['cycle'],$run,$f['checker']->id);
+        $this->policies($f);
+
+        $closing=app(FinancialClosingService::class);
+        $request=$closing->request($f['cycle'],$f['submitter']->id,
+            'cycle.close','First approval completed before the source accounting change.');
+        $closing->decide($request,$f['approverOne']->id,true);
+
+        // Simulate a changed external accounting feed while approval is pending.
+        $line=JournalLine::where('organization_id',$f['org']->id)
+            ->where('account_code','EXP_CODE')->firstOrFail();
+        $line->update(['debit'=>'300.00']);
+        try {
+            $closing->decide($request,$f['approverTwo']->id,true);
+            $this->fail('Stale reconciliation must not support final closing.');
+        } catch (ValidationException $expected) {
+            $this->assertNotEmpty($expected->errors());
+        }
+        $this->assertSame('draft',$f['cycle']->fresh()->status);
+        $this->assertSame(0,DB::table('rka_cycle_closings')->where('cycle_id',$f['cycle']->id)->count());
+    }
+
 }
