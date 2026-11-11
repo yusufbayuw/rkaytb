@@ -29,6 +29,22 @@ use App\Models\Setting;
 
 class RkaConsumableResource extends Resource
 {
+    public static function canViewAny(): bool
+    {
+        return \App\Support\LegacyRkaAccess::canView(auth()->user())
+            && parent::canViewAny();
+    }
+
+    public static function canCreate(): bool
+    {
+        return \App\Support\LegacyRkaAccess::canView(auth()->user())
+            && parent::canCreate();
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return self::canViewAny() && parent::shouldRegisterNavigation();
+    }
     protected static ?string $model = RkaConsumable::class;
 
     protected static ?string $modelLabel = 'Rka Consumable';
