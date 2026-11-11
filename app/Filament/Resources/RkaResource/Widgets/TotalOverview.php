@@ -11,14 +11,23 @@ class TotalOverview extends BaseWidget
 {
     protected function getCards(): array
     {
-        $unit_name = Unit::find(auth()->user()->unit_id)->nama;
-        $unit_id = auth()->user()->unit_id;
-        $formatter = function($total) {
-            return number_format($total);
-        };
+        $user = auth()->user();
+        $formatter = fn ($total) => number_format((float)$total, 2, ',', '.');
 
-        return [
-            auth()->user()->hasRole(['superadmin', 'admin-keuangan']) ? Card::make("Grand Total (Semua Unit)", $formatter((float)Rka::isLeaf()->sum('total'))) : Card::make("Grand Total ({$unit_name})", $formatter(Rka::where('unit_nama', $unit_id)->isRoot()->sum('total'))),
-        ];
+        if ($user->hasAnyRole(['superadmin', 'admin-keuangan'])) {
+            return [Card::make('Grand Total (Semua Unit)',
+                $formatter(Rka::isLeaf()->sum('total')))];
+        }
+
+        $unit = $user->unit_id ? Unit::find($user->unit_id) : null;
+        if (!$unit) {
+            // An RKA-only member has no legacy unit. Never dereference null or expose
+            // a global financial aggregate as a fallback.
+            return [Card::make('RKA Investasi: Unit Belum Ditugaskan', '—')];
+        }
+
+        // Sum leaf records rather than possibly stale parent-string totals.
+        return [Card::make("Grand Total ({$unit->nama})",
+            $formatter(Rka::where('unit_nama', $unit->id)->isLeaf()->sum('total')))];
     }
 }
