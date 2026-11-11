@@ -18,6 +18,10 @@ return new class extends Migration {
 
     public function down(): void
     {
+        // These columns belong to tables introduced by 000001. SQLite cannot
+        // independently drop their foreign keys; full nine-step rollback
+        // removes the entire platform table while preserving legacy tables.
+        if (Schema::getConnection()->getDriverName() === 'sqlite') return;
         foreach (['rka_shared_pools', 'rka_budget_lines'] as $name) {
             Schema::table($name, function (Blueprint $t) {
                 $t->dropConstrainedForeignId('created_by');
