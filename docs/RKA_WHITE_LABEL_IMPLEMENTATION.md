@@ -113,3 +113,15 @@ Rehearsal CI secara eksklusif menggunakan database temporer `ci_upgrade_test.sql
 **Batas finansial:** mesin angka saat ini memakai dua desimal untuk semua mata uang. Organisasi yang memakai presisi selain dua desimal (contohnya JPY atau KWD) memerlukan perluasan skema dan kalkulator sebelum digunakan untuk laporan resmi.
 
 **Release policy: PR tetap Draft, tanpa merge ke main atau deploy.** Publikasi resmi dimatikan secara default sampai business UAT dan quality gate disetujui.
+
+
+## Otomatisasi workflow (branch pengembangan)
+
+- Tugas Saya berbasis kewenangan organisasi, dengan penanda tenggat lewat dan tautan cepat ke pekerjaan. Tidak menambahkan izin baru.
+- Siapkan Penugasan memproses pertanyaan berdasarkan role, unit dan rules. Pemilik ambigu/reviewer tak tersedia dilewati; penugasan existing tidak ditimpa.
+- Draf sintesis dibuat dari jawaban revisi terbaru, tetap perlu disunting dan diverifikasi independen.
+- Perubahan keuangan menyiapkan rekonsiliasi draft hanya bila source hash berubah; tidak ada approval otomatis.
+- Profil KPI valid dari periode terdahulu diwariskan sebagai konfigurasi editable; tidak ada auto-persist approval/jurnal yang telah disahkan.
+- Input KPI/pertanyaan menggunakan formulir biasa dengan opsi JSON lanjutan.
+- Email pengingat bersifat opt-in: RKA_TASK_REMINDER_MAIL_ENABLED=false secara default; RKA_TASK_REMINDER_DAYS_AHEAD=3. Pastikan konfigurasi MAIL_* serta cron Laravel schedule:run sudah aktif. Jalankan php artisan rka:remind-tasks --dry-run untuk simulasi. Jadwal 07.30 zona waktu konfigurasi RKA_TIMEZONE. Gunakan cache persisten/shared pada multi-server untuk deduplikasi sekali per user/siklus/hari. Isi email hanya judul tugas dan tenggat.
+- QA browser, UAT real-data dan release approval tetap wajib sebelum production.
