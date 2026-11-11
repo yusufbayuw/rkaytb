@@ -36,6 +36,8 @@ class AuditLegacyRka extends Command
 
     public function handle(): int
     {
+        $this->counts = [];
+        $this->samples = [];
         $limit = filter_var($this->option('limit'), FILTER_VALIDATE_INT);
         if ($limit === false || $limit < 1 || $limit > 500000) {
             $this->error('--limit must be between 1 and 500000.');
