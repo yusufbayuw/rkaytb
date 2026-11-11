@@ -410,10 +410,7 @@ class RkaConsumableResource extends Resource
                 TextColumn::make('total')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSum();
-                            $parent->total = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSum(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -425,11 +422,7 @@ class RkaConsumableResource extends Resource
                                 return number_format((float)$state);
                             } else {
                                 $state = $record->volume * $record->harga_satuan;
-                                $data = RkaConsumable::find($record->id);
-                                $data->total = $state;
-                                $data->total_view = number_format($state, 2, '.', ',');
-                                $data->total_terbilang = self::terbilang($state);
-                                $data->save();
+                                // No database writes during table rendering. The model saves computed totals.
                                 return number_format((float)$state);
                             }
                         }
@@ -468,10 +461,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('januari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('januari')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumJanuari();
-                            $parent->januari = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumJanuari(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -501,10 +491,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('februari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('februari')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumFebruari();
-                            $parent->februari = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumFebruari(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -534,10 +521,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('maret')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('maret')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumMaret();
-                            $parent->maret = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumMaret(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -567,10 +551,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('april')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('april')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumApril();
-                            $parent->april = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumApril(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -600,10 +581,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('mei')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('mei')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumMei();
-                            $parent->mei = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumMei(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -633,10 +611,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('juni')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juni')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumJuni();
-                            $parent->juni = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumJuni(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -666,10 +641,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('juli')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juli')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumJuli();
-                            $parent->juli = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumJuli(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -699,10 +671,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('agustus')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('agustus')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumAgustus();
-                            $parent->agustus = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumAgustus(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -732,10 +701,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('september')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('september')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumSeptember();
-                            $parent->september = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumSeptember(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -765,10 +731,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('oktober')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('oktober')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumOktober();
-                            $parent->oktober = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumOktober(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -798,10 +761,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('november')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('november')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumNovember();
-                            $parent->november = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumNovember(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -831,10 +791,7 @@ class RkaConsumableResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('desember')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('desember')
                     ->formatStateUsing(function (RkaConsumable $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaConsumable::find($record->id);
-                            $jumlah = $parent->childrenScoreSumDesember();
-                            $parent->desember = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumDesember(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
