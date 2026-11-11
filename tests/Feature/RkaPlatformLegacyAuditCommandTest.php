@@ -34,7 +34,11 @@ class RkaPlatformLegacyAuditCommandTest extends TestCase
 
         $buffer = new BufferedOutput();
         $exit = Artisan::call('rka:audit-legacy', ['--json'=>true,'--strict'=>true], $buffer);
-        $report = json_decode(trim($buffer->fetch()), true, 512, JSON_THROW_ON_ERROR);
+        $raw = trim($buffer->fetch());
+        if (!str_starts_with($raw, '{')) {
+            throw new \RuntimeException('Unexpected audit output: '.substr($raw, 0, 500));
+        }
+        $report = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
         $this->assertSame(1,$exit);
         $this->assertSame('READ_ONLY',$report['mode']);
         $this->assertGreaterThan(0,$report['issue_count']);
