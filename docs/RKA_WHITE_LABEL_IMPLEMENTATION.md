@@ -51,7 +51,7 @@ Untuk Buku RKA, pengguna membuat daftar judul bagian bebas. Awalan **NARASI|, KO
 
 - **Tulis-saat-edit, bukan tulis-saat-baca.** Pada modul Investasi, Maintenance, Consumable, Operasional, dan Pendapatan, formulir/table inline menyimpan angka input; `HasLegacyRkaTotals` menyinkronkan total rincian, total induk hingga akar, dan bulan pada satu transaksi.
 - Parent harus masih merupakan induk, berada dalam unit legacy yang sama, dan tidak membuat hubungan melingkar. Parent tidak boleh dipindah ke unit lain saat masih memiliki anak, dihapus sebelum anak dipindah, atau dikonversi ke leaf secara sepihak. Penyusunan total manual yang bertentangan dengan volume × harga diganti dengan nilai formula saat penyimpanan.
-- Permission `canViewAny/canCreate/canView/canEdit/canDelete` ditambahkan pada enam resource RKA lama untuk mencegah akses record lintas unit; akun keuangan legacy mempertahankan aturan akses lintas unit yang sebelumnya berlaku pada modul Gaji.
+- Permission `canViewAny/canCreate/canView/canEdit/canDelete` ditambahkan pada enam resource RKA lama untuk mencegah akses record lintas unit. Daftar **RKA Gaji** juga kini dibatasi berdasarkan unit untuk pengguna biasa; peran `admin-keuangan` dan `superadmin` tetap dapat melihat seluruh data Gaji sesuai hak akses lama.
 - **Tanpa migrasi massal**: perubahan tidak menjalankan backfill total historis, penggantian kode unit, atau pemetaan angka buku ke modul baru. Data yang dahulu salah tetap membutuhkan penilaian/rekonsiliasi terkontrol.
 - Operasi SQL langsung, query-builder mass update/delete, dan integrasi pihak ketiga yang tidak memakai `Model::save/delete` dapat melewati hook agregasi. Audit integrasi produksi diperlukan sebelum GO LIVE.
 
