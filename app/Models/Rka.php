@@ -12,6 +12,20 @@ class Rka extends Model
 
     protected $guarded = [];
 
+    /**
+     * A leaf write and its stored ancestor aggregates form one financial
+     * transaction. Model hooks alone would otherwise commit the leaf first.
+     */
+    public function save(array $options = [])
+    {
+        return \Illuminate\Support\Facades\DB::transaction(fn () => parent::save($options));
+    }
+
+    public function delete()
+    {
+        return \Illuminate\Support\Facades\DB::transaction(fn () => parent::delete());
+    }
+
     protected static function booted(): void
     {
         static::saving(fn (self $record) => app(\App\Services\LegacyRkaTotals::class)->beforeSave($record));
