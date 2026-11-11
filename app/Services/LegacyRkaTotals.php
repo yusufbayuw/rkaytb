@@ -2,7 +2,7 @@
 
 namespace App\Services;
 
-use App\Models\Rka;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -17,7 +17,7 @@ class LegacyRkaTotals
      * Apply the leaf formula only when the user saves financial input.
      * Rendering a Filament table or reading an old record never rewrites data.
      */
-    public function beforeSave(Rka $rka): void
+    public function beforeSave(Model $rka): void
     {
         // Validate only new or modified ancestry. Existing legacy records with an
         // untouched parent are not silently rewritten or migrated.
@@ -75,7 +75,7 @@ class LegacyRkaTotals
         }
     }
 
-    private function validateAncestry(Rka $rka): void
+    private function validateAncestry(Model $rka): void
     {
         if ($rka->parent_id === null) return;
 
@@ -89,7 +89,7 @@ class LegacyRkaTotals
                 ]);
             }
             $visited[$id] = true;
-            $parent = Rka::query()->find($id);
+            $parent = $rka->newQuery()->find($id);
             if (!$parent || !(bool)$parent->is_parent) {
                 throw ValidationException::withMessages([
                     'parent_id' => 'Induk RKA tidak tersedia atau bukan anggaran induk.',
@@ -104,7 +104,7 @@ class LegacyRkaTotals
         }
     }
 
-    public function afterSave(Rka $rka): void
+    public function afterSave(Model $rka): void
     {
         if (!$rka->wasRecentlyCreated && !$rka->isDirty([
             'total', 'volume', 'harga_satuan', 'is_parent', 'parent_id',
@@ -115,24 +115,24 @@ class LegacyRkaTotals
 
         DB::transaction(function () use ($rka) {
             if ((bool)$rka->is_parent) {
-                $this->updateChain($rka->id);
+                $this->updateChain($rka, $rka->id);
             }
-            $this->updateChain($rka->parent_id);
+            $this->updateChain($rka, $rka->parent_id);
             if ($rka->isDirty('parent_id')) {
                 $previous = $rka->getRawOriginal('parent_id');
                 if ($previous !== null && (int)$previous !== (int)$rka->parent_id) {
-                    $this->updateChain((int)$previous);
+                    $this->updateChain($rka, (int)$previous);
                 }
             }
         });
     }
 
-    public function afterDelete(Rka $rka): void
+    public function afterDelete(Model $rka): void
     {
-        DB::transaction(fn () => $this->updateChain($rka->parent_id));
+        DB::transaction(fn () => $this->updateChain($rka, $rka->parent_id));
     }
 
-    private function updateChain(?int $parentId): void
+    private function updateChain(Model $rka, ?int $parentId): void
     {
         $visited = [];
         while ($parentId !== null) {
@@ -140,12 +140,12 @@ class LegacyRkaTotals
                 throw ValidationException::withMessages(['parent_id' => 'Hierarki RKA membentuk siklus atau terlalu dalam.']);
             }
             $visited[$parentId] = true;
-            $parent = DB::table('rkas')->where('id', $parentId)->lockForUpdate()->first();
+            $parent = DB::table($rka->getTable())->where('id', $parentId)->lockForUpdate()->first();
             if (!$parent) {
                 return;
             }
             if ($parent->is_parent) {
-                $children = DB::table('rkas')->where('parent_id', $parentId);
+                $children = DB::table($rka->getTable())->where('parent_id', $parentId);
                 $total = round((float)(clone $children)->sum('total'), 2);
                 $values = [
                     'total' => number_format($total, 2, '.', ''),
@@ -167,7 +167,7 @@ class LegacyRkaTotals
                 if ($changed) {
                     $values['updated_at'] = now();
                     // DB update bypasses model hooks and prevents recursive save loops.
-                    DB::table('rkas')->where('id', $parentId)->update($values);
+                    DB::table($rka->getTable())->where('id', $parentId)->update($values);
                 }
             }
             $parentId = $parent->parent_id === null ? null : (int)$parent->parent_id;
