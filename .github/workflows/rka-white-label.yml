@@ -17,6 +17,13 @@ jobs:
         with:
           node-version: '20'
           cache: npm
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, dom, fileinfo, pdo_sqlite, sqlite3, zip, gd, intl
+          coverage: none
+      - name: Install Filament CSS dependencies from composer.lock
+        run: composer install --no-interaction --prefer-dist --no-progress
       - name: Install frontend dependencies from lockfile
         run: npm ci
       - name: Verify production assets
