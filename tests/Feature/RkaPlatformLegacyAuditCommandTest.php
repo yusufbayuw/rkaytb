@@ -4,7 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Rka;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Artisan;
+use App\Console\Commands\AuditLegacyRka;
+use Symfony\Component\Console\Input\ArrayInput;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 use Symfony\Component\Console\Output\BufferedOutput;
@@ -12,6 +13,17 @@ use Symfony\Component\Console\Output\BufferedOutput;
 class RkaPlatformLegacyAuditCommandTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function runAudit(array $options): array
+    {
+        $command = app(AuditLegacyRka::class);
+        $input = new ArrayInput($options, $command->getDefinition());
+        $output = new BufferedOutput();
+        $exit = $command->run($input, $output);
+        $raw = trim($output->fetch());
+        $this->assertNotSame('', $raw, 'Audit command returned no output, exit code '.$exit);
+        return [$exit, json_decode($raw, true, 512, JSON_THROW_ON_ERROR)];
+    }
 
     public function test_historical_audit_detects_inconsistent_leaf_and_parent_without_writing(): void
     {
@@ -32,13 +44,7 @@ class RkaPlatformLegacyAuditCommandTest extends TestCase
                 $query->sql)) $writeQueries[] = $query->sql;
         });
 
-        $buffer = new BufferedOutput();
-        $exit = Artisan::call('rka:audit-legacy', ['--json'=>true,'--strict'=>true], $buffer);
-        $raw = trim($buffer->fetch());
-        if (!str_starts_with($raw, '{')) {
-            throw new \RuntimeException('Unexpected audit output: '.substr($raw, 0, 500));
-        }
-        $report = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        [$exit, $report] = $this->runAudit(['--json'=>true,'--strict'=>true]);
         $this->assertSame(1,$exit);
         $this->assertSame('READ_ONLY',$report['mode']);
         $this->assertGreaterThan(0,$report['issue_count']);
@@ -57,9 +63,7 @@ class RkaPlatformLegacyAuditCommandTest extends TestCase
             'parent_id'=>$root->id,'volume'=>'1','harga_satuan'=>'3.50',
         ]);
         DB::table('rkas')->where('id',$child->id)->update(['unit_nama'=>'B']);
-        $buffer = new BufferedOutput();
-        $result = Artisan::call('rka:audit-legacy', ['--json'=>true], $buffer);
-        $report = json_decode(trim($buffer->fetch()), true, 512, JSON_THROW_ON_ERROR);
+        [$result, $report] = $this->runAudit(['--json'=>true]);
         $this->assertSame(0,$result);
         $this->assertArrayHasKey('rkas:cross_unit_parent',$report['issues_by_type']);
         $this->assertSame('B',DB::table('rkas')->where('id',$child->id)->value('unit_nama'));
@@ -69,11 +73,9 @@ class RkaPlatformLegacyAuditCommandTest extends TestCase
     {
         Rka::create(['uraian'=>'First','unit_nama'=>'A','is_parent'=>true]);
         Rka::create(['uraian'=>'Second','unit_nama'=>'A','is_parent'=>true]);
-        $buffer = new BufferedOutput();
-        $exit=Artisan::call('rka:audit-legacy',[
-            '--json'=>true,'--strict'=>true,'--limit'=>1,
-        ], $buffer);
-        $report=json_decode(trim($buffer->fetch()),true,512,JSON_THROW_ON_ERROR);
+        [$exit, $report] = $this->runAudit([
+            '--json'=>true,'--strict'=>true,'--limit'=>'1',
+        ]);
         $this->assertSame(1,$exit);
         $this->assertArrayHasKey('rkas:incomplete_scan',$report['issues_by_type']);
         $this->assertTrue($report['table_summary']['rkas']['truncated']);
