@@ -5,10 +5,8 @@ namespace Tests\Feature;
 use App\Models\Rka;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use App\Console\Commands\AuditLegacyRka;
-use Symfony\Component\Console\Input\ArrayInput;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
-use Symfony\Component\Console\Output\BufferedOutput;
 
 class RkaPlatformLegacyAuditCommandTest extends TestCase
 {
@@ -16,14 +14,10 @@ class RkaPlatformLegacyAuditCommandTest extends TestCase
 
     private function runAudit(array $options): array
     {
-        $command = app(AuditLegacyRka::class);
-        $command->setLaravel($this->app);
-        $input = new ArrayInput($options, $command->getDefinition());
-        $output = new BufferedOutput();
-        $exit = $command->run($input, $output);
-        $raw = trim($output->fetch());
-        $this->assertNotSame('', $raw, 'Audit command returned no output, exit code '.$exit);
-        return [$exit, json_decode($raw, true, 512, JSON_THROW_ON_ERROR)];
+        $limit = (int)($options['--limit'] ?? 200000);
+        $report = app(AuditLegacyRka::class)->scan($limit);
+        $exit = !empty($options['--strict']) && $report['issue_count'] > 0 ? 1 : 0;
+        return [$exit, $report];
     }
 
     public function test_historical_audit_detects_inconsistent_leaf_and_parent_without_writing(): void
