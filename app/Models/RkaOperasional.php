@@ -3,12 +3,13 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\HasLegacyRkaTotals;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Staudenmeir\LaravelAdjacencyList\Eloquent\HasRecursiveRelationships;
 
 class RkaOperasional extends Model
 {
-    use HasFactory, HasRecursiveRelationships;
+    use HasFactory, HasRecursiveRelationships, HasLegacyRkaTotals;
 
     protected $guarded = [];
 

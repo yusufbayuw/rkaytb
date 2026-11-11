@@ -27,6 +27,40 @@ use AlperenErsoy\FilamentExport\Actions\FilamentExportHeaderAction;
 
 class RkaGajiResource extends Resource
 {
+    public static function canViewAny(): bool
+    {
+        return \App\Support\LegacyRkaAccess::canView(auth()->user())
+            && parent::canViewAny();
+    }
+
+    public static function canCreate(): bool
+    {
+        return \App\Support\LegacyRkaAccess::canView(auth()->user())
+            && parent::canCreate();
+    }
+
+    public static function canView(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, true)
+            && parent::canView($record);
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, true)
+            && parent::canEdit($record);
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, true)
+            && parent::canDelete($record);
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return self::canViewAny() && parent::shouldRegisterNavigation();
+    }
     protected static ?string $model = RkaGaji::class;
 
     protected static ?string $modelLabel = 'Rka Gaji';
@@ -38,6 +72,25 @@ class RkaGajiResource extends Resource
     protected static ?string $navigationLabel = 'RKA Gaji';
 
     protected static ?string $navigationGroup = 'Rencana Kerja & Anggaran';
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        $query = parent::getEloquentQuery();
+        $user = auth()->user();
+
+        if ($user && $user->hasAnyRole(['superadmin', 'admin-keuangan'])) {
+            return $query;
+        }
+
+        // The former default query exposed the entire payroll budget to
+        // ordinary unit accounts. Fail closed for unassigned users.
+        if (!$user || !$user->unit_id ||
+            !\App\Models\Unit::query()->whereKey($user->unit_id)->exists()) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where('unit_nama', (string)$user->unit_id);
+    }
 
     public static function form(Form $form): Form
     {

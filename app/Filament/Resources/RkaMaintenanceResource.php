@@ -29,6 +29,40 @@ use App\Models\Setting;
 
 class RkaMaintenanceResource extends Resource
 {
+    public static function canViewAny(): bool
+    {
+        return \App\Support\LegacyRkaAccess::canView(auth()->user())
+            && parent::canViewAny();
+    }
+
+    public static function canCreate(): bool
+    {
+        return \App\Support\LegacyRkaAccess::canView(auth()->user())
+            && parent::canCreate();
+    }
+
+    public static function canView(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
+            && parent::canView($record);
+    }
+
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
+            && parent::canEdit($record);
+    }
+
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    {
+        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
+            && parent::canDelete($record);
+    }
+
+    public static function shouldRegisterNavigation(): bool
+    {
+        return self::canViewAny() && parent::shouldRegisterNavigation();
+    }
     protected static ?string $model = RkaMaintenance::class;
 
     protected static ?string $modelLabel = 'Rka Maintenance';
@@ -374,10 +408,7 @@ class RkaMaintenanceResource extends Resource
                 TextColumn::make('total')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSum();
-                            $parent->total = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSum(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -389,11 +420,7 @@ class RkaMaintenanceResource extends Resource
                                 return number_format((float)$state);
                             } else {
                                 $state = $record->volume * $record->harga_satuan;
-                                $data = RkaMaintenance::find($record->id);
-                                $data->total = $state;
-                                $data->total_view = number_format($state, 2, '.', ',');
-                                $data->total_terbilang = self::terbilang($state);
-                                $data->save();
+                                // No database writes during table rendering. The model saves computed totals.
                                 return number_format((float)$state);
                             }
                         }
@@ -432,10 +459,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('januari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('januari')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumJanuari();
-                            $parent->januari = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumJanuari(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -465,10 +489,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('februari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('februari')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumFebruari();
-                            $parent->februari = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumFebruari(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -498,10 +519,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('maret')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('maret')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumMaret();
-                            $parent->maret = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumMaret(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -531,10 +549,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('april')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('april')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumApril();
-                            $parent->april = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumApril(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -564,10 +579,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('mei')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('mei')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumMei();
-                            $parent->mei = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumMei(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -597,10 +609,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('juni')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juni')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumJuni();
-                            $parent->juni = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumJuni(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -630,10 +639,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('juli')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juli')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumJuli();
-                            $parent->juli = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumJuli(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -663,10 +669,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('agustus')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('agustus')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumAgustus();
-                            $parent->agustus = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumAgustus(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -696,10 +699,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('september')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('september')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumSeptember();
-                            $parent->september = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumSeptember(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -729,10 +729,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('oktober')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('oktober')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumOktober();
-                            $parent->oktober = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumOktober(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -762,10 +759,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('november')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('november')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumNovember();
-                            $parent->november = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumNovember(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;
@@ -795,10 +789,7 @@ class RkaMaintenanceResource extends Resource
                 (auth()->user()->is_editmode) ? TextInputColumn::make('desember')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('desember')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
-                            $parent = RkaMaintenance::find($record->id);
-                            $jumlah = $parent->childrenScoreSumDesember();
-                            $parent->desember = $jumlah;
-                            $parent->save();
+                            $jumlah = $record->childrenScoreSumDesember(); // Read-only display; totals synchronize on save.
 
                             if ($state !== null && $state > 0) {
                                 return ($jumlah !== $state) ? number_format($jumlah) : null;

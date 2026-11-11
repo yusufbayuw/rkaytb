@@ -1,0 +1,65 @@
+<?php
+
+namespace App\Services\RkaPlatform;
+
+use App\Models\RkaPlatform\{BudgetLine, SharedPool, Cycle};
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
+
+class FinancialApprovalService
+{
+    public function __construct(private TenantAccess $access, private AuditTrail $audit) {}
+
+    public function approveBudget(BudgetLine $line, int $reviewerId): BudgetLine
+    {
+        $this->access->requireRole($line->organization_id, $reviewerId, ['owner','admin','finance']);
+        return DB::transaction(function () use ($line, $reviewerId) {
+            $locked = BudgetLine::query()->lockForUpdate()->findOrFail($line->id);
+            if (Cycle::where('organization_id', $locked->organization_id)->whereKey($locked->cycle_id)
+                ->where('status', 'draft')->doesntExist()) {
+                throw ValidationException::withMessages(['budget' => 'Periode tidak dapat disahkan setelah closing.']);
+            }
+            if ($locked->status !== 'draft') {
+                throw ValidationException::withMessages(['budget' => 'Anggaran tidak berada dalam status draft.']);
+            }
+            if ($locked->created_by === $reviewerId) {
+                throw new AuthorizationException('Penyusun anggaran tidak boleh menyetujui pekerjaannya sendiri.');
+            }
+            $locked->update(['status' => 'approved', 'approved_by' => $reviewerId, 'approved_at' => now()]);
+            $this->audit->record($locked->organization_id, $reviewerId, 'budget.approved', 'budget_line', $locked->id);
+            return $locked;
+        });
+    }
+
+    public function approvePool(SharedPool $pool, int $reviewerId): SharedPool
+    {
+        $this->access->requireRole($pool->organization_id, $reviewerId, ['owner','admin','finance']);
+        return DB::transaction(function () use ($pool, $reviewerId) {
+            $locked = SharedPool::query()->lockForUpdate()->findOrFail($pool->id);
+            if (Cycle::where('organization_id', $locked->organization_id)->whereKey($locked->cycle_id)
+                ->where('status', 'draft')->doesntExist()) {
+                throw ValidationException::withMessages(['pool' => 'Periode tidak dapat disahkan setelah closing.']);
+            }
+            if ($locked->status !== 'draft' || empty($locked->allocations)) {
+                throw ValidationException::withMessages(['pool' => 'Alokasi belum lengkap atau tidak lagi draft.']);
+            }
+            if ($locked->created_by === $reviewerId) {
+                throw new AuthorizationException('Penyusun alokasi tidak boleh menyetujui hasilnya sendiri.');
+            }
+            $cycle = Cycle::where('organization_id', $locked->organization_id)
+                ->whereKey($locked->cycle_id)->firstOrFail();
+            // Re-check amount, all recipients, versioned signatures and disputes under lock.
+            app(SharedPoolUnitConsentService::class)->requireAll($locked, $cycle);
+            $consentingReviewer = DB::table('rka_shared_pool_unit_consents')
+                ->where('pool_id', $locked->id)->where('pool_version', $locked->version)
+                ->where('approved_by', $reviewerId)->exists();
+            if ($consentingReviewer) {
+                throw new AuthorizationException('Reviewer pusat tidak boleh menyetujui alokasi yang ditandatanganinya sebagai unit.');
+            }
+            $locked->update(['status' => 'approved', 'approved_by' => $reviewerId, 'approved_at' => now()]);
+            $this->audit->record($locked->organization_id, $reviewerId, 'shared_pool.approved', 'shared_pool', $locked->id);
+            return $locked;
+        });
+    }
+}

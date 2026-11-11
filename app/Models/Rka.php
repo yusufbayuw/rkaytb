@@ -3,14 +3,16 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Concerns\HasLegacyRkaTotals;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Staudenmeir\LaravelAdjacencyList\Eloquent\HasRecursiveRelationships;
 
 class Rka extends Model
 {
-    use HasFactory, HasRecursiveRelationships;
+    use HasFactory, HasRecursiveRelationships, HasLegacyRkaTotals;
 
     protected $guarded = [];
+
 
     public function children() {
         return $this->hasMany(Rka::class, 'parent_id');

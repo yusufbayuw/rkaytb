@@ -1,0 +1,98 @@
+name: RKA White Label Checks
+
+on:
+  # Run for every PR change, including legacy Resources, commands, all
+  # migrations, security controls, workflow scripts and dependency files.
+  pull_request:
+  push:
+    branches: [feature/white-label-rka-platform]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, dom, fileinfo, pdo_sqlite, sqlite3, zip, gd, intl
+          coverage: none
+      - name: PHP syntax lint (independent of Composer)
+        run: |
+          find app database/migrations tests routes config scripts -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - run: composer validate --no-check-publish
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Prepare app environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
+      - name: Test full suite including legacy smoke tests
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ':memory:'
+        run: php artisan test
+      - name: Check Filament Blade views
+        run: php artisan view:cache
+      - name: Check routes and read-only historical audit command registration
+        run: |
+          php artisan route:list --path=rka-platform
+          php artisan list --raw | grep -F 'rka:audit-legacy'
+      - name: Non-destructive legacy-to-platform migration + rollback rehearsal (isolated SQLite)
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: sqlite
+          DB_DATABASE: ${{ github.workspace }}/database/ci_upgrade_test.sqlite
+        run: bash scripts/ci-verify-rka-upgrade.sh
+  mysql:
+    name: MySQL 8 migration and regression
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test-password
+          MYSQL_DATABASE: rka_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptest-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, dom, fileinfo, pdo_mysql, zip, gd, intl
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Prepare isolated test environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate --force
+      - name: Test migrations and full regression suite
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: rka_test
+          DB_USERNAME: root
+          DB_PASSWORD: test-password
+          CACHE_DRIVER: array
+          SESSION_DRIVER: array
+        run: php artisan test
+      - name: Non-destructive legacy-to-platform migration + rollback rehearsal (isolated MySQL)
+        env:
+          APP_ENV: testing
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: rka_test
+          DB_USERNAME: root
+          DB_PASSWORD: test-password
+          CACHE_DRIVER: array
+          SESSION_DRIVER: array
+        run: bash scripts/ci-verify-rka-upgrade.sh

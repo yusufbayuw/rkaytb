@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Illuminate\Auth\Middleware\Authenticate as Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 
 class Authenticate extends Middleware
 {
@@ -12,6 +13,14 @@ class Authenticate extends Middleware
      */
     protected function redirectTo(Request $request): ?string
     {
-        return $request->expectsJson() ? null : route('login');
+        if ($request->expectsJson()) return null;
+
+        // The legacy application has a Filament login route, not necessarily
+        // the Laravel Breeze/Auth scaffolding route named "login".
+        if (Route::has('login')) return route('login');
+        if (Route::has('filament.auth.login')) return route('filament.auth.login');
+
+        // Last-resort configured panel URL prevents a 500 for guest downloads.
+        return url(trim((string)config('filament.path', 'admin'), '/').'/login');
     }
 }

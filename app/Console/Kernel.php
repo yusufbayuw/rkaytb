@@ -12,7 +12,9 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // $schedule->command('inspire')->hourly();
+        $schedule->command('rka:remind-tasks')->dailyAt('07:30')
+            ->timezone(config('rka_platform.timezone', 'Asia/Jakarta'))
+            ->withoutOverlapping();
     }
 
     /**
