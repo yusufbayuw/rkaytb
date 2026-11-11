@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Filament\Pages\RkaPlatformWorkspace;
+use Livewire\Livewire;
 use App\Models\RkaPlatform\{Organization, Membership, Unit, Cycle, SharedPool};
 use App\Services\RkaPlatform\{
     SharingImpactGovernance, SharedPoolUnitConsentService,
@@ -184,4 +186,32 @@ class RkaPlatformSharingImpactTest extends TestCase
         $this->expectException(AuthorizationException::class);
         app(SharingImpactGovernance::class)->approveAssessment($f['pool'],$assessment,$outsider->id);
     }
+    public function test_livewire_workflow_shows_financial_assessment_and_unit_information(): void
+    {
+        $f = $this->fixture();
+        Livewire::actingAs($f['maker'])->test(RkaPlatformWorkspace::class)
+            ->call('selectCycle', $f['cycle']->id)
+            ->assertSee('Penilaian Dampak Sharing Budget')
+            ->set('impactPoolId', $f['pool']->id)
+            ->set('impactChangeType','routine')
+            ->set('impactTier','inform')
+            ->set('impactReason','Routine yearly pool uses a previously approved and closed allocation baseline.')
+            ->call('proposeSharingImpact')
+            ->assertHasNoErrors();
+
+        $impact = DB::table('rka_shared_pool_impact_assessments')
+            ->where('pool_id',$f['pool']->id)->first();
+        $this->assertNotNull($impact);
+
+        Livewire::actingAs($f['owner'])->test(RkaPlatformWorkspace::class)
+            ->call('selectCycle', $f['cycle']->id)
+            ->call('approveSharingImpact', $impact->id)
+            ->assertHasNoErrors();
+
+        Livewire::actingAs($f['headA'])->test(RkaPlatformWorkspace::class)
+            ->call('selectCycle', $f['cycle']->id)
+            ->assertSee('Persetujuan Sharing Budget untuk Unit Saya')
+            ->assertSee('Informasi rutin');
+    }
+
 }
