@@ -17,6 +17,7 @@ class RkaPlatformLegacyAuditCommandTest extends TestCase
     private function runAudit(array $options): array
     {
         $command = app(AuditLegacyRka::class);
+        $command->setLaravel($this->app);
         $input = new ArrayInput($options, $command->getDefinition());
         $output = new BufferedOutput();
         $exit = $command->run($input, $output);
