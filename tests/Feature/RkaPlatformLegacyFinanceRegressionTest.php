@@ -15,6 +15,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
+use Illuminate\Validation\ValidationException;
 
 class RkaPlatformLegacyFinanceRegressionTest extends TestCase
 {
@@ -109,4 +110,82 @@ class RkaPlatformLegacyFinanceRegressionTest extends TestCase
         $global->assignRole('admin-keuangan');
         $this->assertTrue(\App\Support\LegacyRkaAccess::canView($global));
     }
+    public function test_leaf_cannot_be_reparented_across_units_or_into_its_descendant(): void
+    {
+        $unitA = $this->row('Unit A Root', true);
+        $unitB = Rka::create([
+            'uraian' => 'Unit B Root', 'is_parent' => true,
+            'is_detail' => false, 'unit_nama' => '2',
+        ]);
+        $leaf = $this->row('Unit A Item', false, $unitA, '2', '10.00');
+        try {
+            $leaf->update(['parent_id' => $unitB->id]);
+            $this->fail('Cross-unit parent must be rejected.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('parent_id', $e->errors());
+        }
+        $this->assertSame($unitA->id, $leaf->fresh()->parent_id);
+        $this->assertSame('20.00', $unitA->fresh()->total);
+
+        $section = $this->row('Section', true, $unitA);
+        try {
+            $unitA->update(['parent_id' => $section->id]);
+            $this->fail('Cyclic hierarchy must be rejected.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('parent_id', $e->errors());
+        }
+        $this->assertNull($unitA->fresh()->parent_id);
+    }
+
+    public function test_parent_cannot_be_deleted_with_children_or_changed_into_leaf(): void
+    {
+        $parent = $this->row('Parent', true);
+        $child = $this->row('Child', false, $parent, '1', '40.00');
+        try {
+            $parent->delete();
+            $this->fail('Deleting parent with children must be rejected.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('parent_id', $e->errors());
+        }
+        try {
+            $parent->update(['is_parent' => false]);
+            $this->fail('Parent with children cannot become leaf.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('is_parent', $e->errors());
+        }
+        $this->assertNotNull($parent->fresh());
+        $this->assertNotNull($child->fresh());
+        $this->assertSame('40.00', $parent->fresh()->total);
+    }
+
+    public function test_manual_override_of_derived_total_is_recomputed_from_inputs(): void
+    {
+        $root = $this->row('Root', true);
+        $leaf = $this->row('Item', false, $root, '2', '12.50');
+        $leaf->update(['total' => '999999.00','total_view'=>'tampered']);
+        $this->assertSame('25.00', $leaf->fresh()->total);
+        $this->assertSame('25.00', $root->fresh()->total);
+    }
+
+    public function test_direct_record_actions_reject_another_legacy_unit(): void
+    {
+        $unitOne = Unit::create(['nama' => 'Unit One']);
+        $unitTwo = Unit::create(['nama' => 'Unit Two']);
+        $user = User::factory()->create(['unit_id' => $unitOne->id]);
+        $this->actingAs($user);
+        $foreign = Rka::create([
+            'uraian' => 'Other unit item', 'is_parent' => false,
+            'is_detail' => false, 'unit_nama' => (string)$unitTwo->id,
+            'volume' => '1', 'harga_satuan' => '25',
+        ]);
+        foreach ([
+            RkaResource::class, RkaMaintenanceResource::class, RkaConsumableResource::class,
+            RkaOperasionalResource::class, RkaGajiResource::class, RkaPendapatanResource::class,
+        ] as $resource) {
+            $this->assertFalse($resource::canView($foreign), $resource.' view must be scoped');
+            $this->assertFalse($resource::canEdit($foreign), $resource.' edit must be scoped');
+            $this->assertFalse($resource::canDelete($foreign), $resource.' delete must be scoped');
+        }
+    }
+
 }
