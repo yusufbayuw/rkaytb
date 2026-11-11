@@ -34,8 +34,10 @@ jobs:
         run: php artisan test
       - name: Check Filament Blade views
         run: php artisan view:cache
-      - name: Check routes
-        run: php artisan route:list --path=rka-platform
+      - name: Check routes and read-only historical audit command registration
+        run: |
+          php artisan route:list --path=rka-platform
+          php artisan list --raw | grep -F 'rka:audit-legacy'
       - name: Non-destructive legacy-to-platform migration + rollback rehearsal (isolated SQLite)
         env:
           APP_ENV: testing
