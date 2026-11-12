@@ -2,13 +2,15 @@
 
 namespace App\Filament\Resources;
 
+use Filament\Actions;
+
 use App\Filament\Resources\SettingResource\Pages;
 use App\Filament\Resources\SettingResource\RelationManagers;
 use App\Models\Setting;
 use Filament\Forms;
-use Filament\Resources\Form;
+use Filament\Schemas\Schema as Form;
 use Filament\Resources\Resource;
-use Filament\Resources\Table;
+use Filament\Tables\Table;
 use Filament\Tables;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
@@ -17,9 +19,9 @@ class SettingResource extends Resource
 {
     protected static ?string $model = Setting::class;
 
-    protected static ?string $navigationIcon = 'heroicon-s-cog';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-s-cog';
 
-    protected static ?string $navigationGroup = 'Settings';
+    protected static string|\UnitEnum|null $navigationGroup = 'Settings';
 
     public static function form(Form $form): Form
     {
@@ -59,12 +61,12 @@ class SettingResource extends Resource
             ->filters([
                 //
             ])
-            ->actions([
-                Tables\Actions\EditAction::make()->hidden(),
-                Tables\Actions\DeleteAction::make()->hidden(),
+            ->recordActions([
+                Actions\EditAction::make()->hidden(),
+                Actions\DeleteAction::make()->hidden(),
             ])
-            ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make()->hidden(),
+            ->toolbarActions([
+                Actions\DeleteBulkAction::make()->hidden(),
             ]);
     }
     

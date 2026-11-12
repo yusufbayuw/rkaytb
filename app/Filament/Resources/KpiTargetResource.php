@@ -2,13 +2,15 @@
 
 namespace App\Filament\Resources;
 
+use Filament\Actions;
+
 use App\Filament\Resources\KpiTargetResource\Pages;
 use App\Filament\Resources\KpiTargetResource\RelationManagers;
 use App\Models\KpiTarget;
 use Filament\Forms;
-use Filament\Resources\Form;
+use Filament\Schemas\Schema as Form;
 use Filament\Resources\Resource;
-use Filament\Resources\Table;
+use Filament\Tables\Table;
 use Filament\Tables;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
@@ -17,7 +19,7 @@ class KpiTargetResource extends Resource
 {
     protected static ?string $model = KpiTarget::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-collection';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-rectangle-stack';
 
     public static function form(Form $form): Form
     {
@@ -42,12 +44,12 @@ class KpiTargetResource extends Resource
             ->filters([
                 //
             ])
-            ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+            ->recordActions([
+                Actions\EditAction::make(),
+                Actions\DeleteAction::make(),
             ])
-            ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+            ->toolbarActions([
+                Actions\DeleteBulkAction::make(),
             ]);
     }
     

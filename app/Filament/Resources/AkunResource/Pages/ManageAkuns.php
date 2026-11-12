@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\AkunResource\Pages;
 
 use App\Models\Setting;
-use Filament\Pages\Actions;
+use Filament\Actions;
 use App\Filament\Resources\AkunResource;
 use Filament\Resources\Pages\ManageRecords;
 
@@ -11,24 +11,27 @@ class ManageAkuns extends ManageRecords
 {
     protected static string $resource = AkunResource::class;
 
-    protected function getActions(): array
+    protected function getHeaderActions(): array
     {
-        $dataSettingVal = Setting::find(2)->valbool;
+        $dataSettingVal = Setting::flag(2);
         return [
-            Actions\Action::make(($dataSettingVal) ? 'Mode: Otomatis' : 'Mode: Manual')
+            Actions\Action::make('toggleAccountMode')->label(fn () => Setting::flag(2) ? 'Mode: Otomatis' : 'Mode: Manual')
+                ->visible(fn () => auth()->user()->hasRole('superadmin'))
                 ->action(
                     function () {
-                        $dataSetting = Setting::find(2);
+                        $dataSetting = Setting::firstOrCreate(['id' => 2], ['nama' => 'Nomor Akun Otomatis', 'valbool' => false]);
+                        \Illuminate\Support\Facades\Gate::authorize('update', $dataSetting);
                         $dataSetting->valbool = !($dataSetting->valbool);
                         $dataSetting->save();
+                        $this->resetTable();
                     }
-                )->color(fn () => ($dataSettingVal) ? 'secondary' : 'primary'),
+                )->color(fn () => ($dataSettingVal) ? 'gray' : 'primary'),
             Actions\CreateAction::make()->hidden($dataSettingVal),
         ];
     }
 
     protected function isTablePaginationEnabled(): bool 
     {
-        return !(Setting::find(2)->valbool);
+        return !(Setting::flag(2));
     }
 }

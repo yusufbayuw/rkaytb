@@ -2,14 +2,16 @@
 
 namespace App\Filament\Resources;
 
+use Filament\Actions;
+
 use App\Filament\Resources\AkunResource\Pages;
 use App\Filament\Resources\AkunResource\RelationManagers;
 use App\Models\Akun;
 use App\Models\Setting;
 use Filament\Forms;
-use Filament\Resources\Form;
+use Filament\Schemas\Schema as Form;
 use Filament\Resources\Resource;
-use Filament\Resources\Table;
+use Filament\Tables\Table;
 use Filament\Tables;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
@@ -18,9 +20,9 @@ class AkunResource extends Resource
 {
     protected static ?string $model = Akun::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-document-text';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-document-text';
 
-    protected static ?string $navigationGroup = 'Keuangan';
+    protected static string|\UnitEnum|null $navigationGroup = 'Keuangan';
 
     public static function form(Form $form): Form
     {
@@ -37,7 +39,7 @@ class AkunResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->columns((Setting::find(2)->valbool) ? [] : [
+            ->columns((Setting::flag(2)) ? [] : [
                 Tables\Columns\TextColumn::make('nama'),
                 Tables\Columns\TextColumn::make('keterangan'),
                 Tables\Columns\TextColumn::make('created_at')
@@ -48,12 +50,12 @@ class AkunResource extends Resource
             ->filters([
                 //
             ])
-            ->actions((Setting::find(2)->valbool) ? [] : [
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+            ->recordActions((Setting::flag(2)) ? [] : [
+                Actions\EditAction::make(),
+                Actions\DeleteAction::make(),
             ])
-            ->bulkActions((Setting::find(2)->valbool) ? [] : [
-                Tables\Actions\DeleteBulkAction::make(),
+            ->toolbarActions((Setting::flag(2)) ? [] : [
+                Actions\DeleteBulkAction::make(),
             ]);
     }
     

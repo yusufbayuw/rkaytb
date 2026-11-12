@@ -2,10 +2,12 @@
 
 namespace App\Filament\Resources;
 
+use Filament\Actions;
+
 use Filament\Forms;
 use Filament\Tables;
-use Filament\Resources\Form;
-use Filament\Resources\Table;
+use Filament\Schemas\Schema as Form;
+use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\TextInput;
@@ -19,9 +21,18 @@ class PermissionResource extends Resource
 {
     protected static ?string $model = Permission::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-key';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-key';
 
-    protected static ?string $navigationGroup = 'Settings';
+    protected static string|\UnitEnum|null $navigationGroup = 'Settings';
+    public static function canCreate(): bool { return \App\Support\SystemAccess::allowed(); }
+    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool { return \App\Support\SystemAccess::allowed(); }
+    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool { return \App\Support\SystemAccess::allowed(); }
+    public static function canDeleteAny(): bool { return \App\Support\SystemAccess::allowed(); }
+
+    public static function getEloquentQuery(): Builder
+    {
+        return parent::getEloquentQuery()->where('guard_name', config('filament.auth.guard', 'web'));
+    }
 
     public static function form(Form $form): Form
     {
@@ -42,12 +53,12 @@ class PermissionResource extends Resource
             ->filters([
                 //
             ])
-            ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+            ->recordActions([
+                Actions\EditAction::make(),
+                Actions\DeleteAction::make(),
             ])
-            ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+            ->toolbarActions([
+                Actions\DeleteBulkAction::make(),
             ]);
     }
     

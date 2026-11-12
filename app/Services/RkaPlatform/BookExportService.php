@@ -62,12 +62,26 @@ class BookExportService
 
     private function htmlTable(array $table): string
     {
-        $html = '<table><thead><tr>';
-        foreach ($table['headers'] as $heading) $html .= '<th>'.$this->esc($heading).'</th>';
+        $count = count($table['headers']);
+        $wide = $count > 4;
+        $html = '<table'.($wide ? ' class="wide"' : '').'>';
+        if ($wide) {
+            $html .= '<colgroup><col style="width:28%">';
+            for ($i = 1; $i < $count; $i++) $html .= '<col style="width:'.(72 / ($count - 1)).'%">';
+            $html .= '</colgroup>';
+        }
+        $html .= '<thead><tr>';
+        foreach ($table['headers'] as $i => $heading) {
+            $width = $wide ? ' style="width:'.($i === 0 ? 28 : 72 / ($count - 1)).'%"' : '';
+            $html .= '<th'.$width.'>'.$this->esc($heading).'</th>';
+        }
         $html .= '</tr></thead><tbody>';
         foreach ($table['rows'] as $row) {
             $html .= '<tr>';
-            foreach ($row as $value) $html .= '<td>'.$this->esc($value).'</td>';
+            foreach ($row as $i => $value) {
+                $width = $wide ? ' style="width:'.($i === 0 ? 28 : 72 / ($count - 1)).'%"' : '';
+                $html .= '<td'.$width.'>'.$this->esc($value).'</td>';
+            }
             $html .= '</tr>';
         }
         return $html.'</tbody></table>';
@@ -79,10 +93,11 @@ class BookExportService
         if (!preg_match('/^#[0-9a-fA-F]{6}$/', $color)) $color = '#24344a';
         $html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'.
             '@page{margin:22mm 18mm}body{font-family:DejaVu Sans;font-size:9.5pt;line-height:1.5}'.
-            'h1,h2{color:'.$color.'}h1{text-align:center;margin:70mm 0 8mm}'.
+            'h1,h2{color:'.$color.'}h1{text-align:center;margin:8mm 0}'.
             'h2{margin-top:11mm;page-break-after:avoid}p{white-space:pre-wrap}'.
             'table{border-collapse:collapse;width:100%;margin:7mm 0;font-size:8pt}'.
-            'th{background-color:#e6edf4}th,td{border:1px solid #cbd5e1;padding:5px 6px;text-align:left}'.
+            'table.wide{table-layout:fixed}table.wide th{font-size:7pt;line-height:1.35}table.wide th,table.wide td{padding:5px 3px}'.
+            'th{background-color:#e6edf4}th,td{border:1px solid #cbd5e1;padding:5px 6px;text-align:left;overflow-wrap:break-word}'.
             'tr{page-break-inside:avoid}.small{color:#64748b;font-size:8pt}.chart{width:100%;height:auto}'.
             '</style></head><body>';
         $html .= '<h1>'.$this->esc($snapshot['title']).'</h1>';
@@ -96,7 +111,7 @@ class BookExportService
             $html .= '<section><h2>'.$this->esc($section['title']).'</h2>';
             $type = $section['block_type'] ?? 'narrative';
             if ($type === 'narrative') {
-                $html .= '<p>'.nl2br($this->esc($section['content'] ?? '')).'</p>';
+                $html .= '<p>'.$this->esc($section['content'] ?? '').'</p>';
             } else {
                 $table = $this->blocks()->table($type, $snapshot);
                 if ($table) $html .= $this->htmlTable($table);
@@ -218,24 +233,37 @@ class BookExportService
         $sheet->addChart($chart);
     }
 
-    private function wordParagraph(mixed $value, string $style = ''): string
+    private function wordParagraph(mixed $value, string $style = '', string $runStyle = ''): string
     {
-        return '<w:p><w:pPr>'.$style.'</w:pPr><w:r><w:t xml:space="preserve">'.
+        return '<w:p><w:pPr>'.$style.'</w:pPr><w:r>'.$runStyle.'<w:t xml:space="preserve">'.
             htmlspecialchars((string)$value, ENT_XML1 | ENT_QUOTES, 'UTF-8').'</w:t></w:r></w:p>';
     }
 
     private function wordTable(array $table): string
     {
         $rows = array_merge([$table['headers']], $table['rows']);
-        $xml = '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>'.
-            '<w:tblBorders><w:bottom w:val="single" w:sz="4"/>'.
-            '<w:top w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="4"/>'.
-            '</w:tblBorders></w:tblPr>';
+        $count = max(1, count($table['headers']));
+        $widths = array_fill(0, $count, intdiv(9638, $count));
+        if ($count > 4) {
+            $widths[0] = 2400;
+            for ($i = 1; $i < $count; $i++) $widths[$i] = intdiv(9638 - 2400, $count - 1);
+        }
+        $widths[$count - 1] += 9638 - array_sum($widths);
+        $xml = '<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblLayout w:type="fixed"/>'.
+            '<w:tblBorders>';
+        foreach (['top', 'left', 'bottom', 'right', 'insideH', 'insideV'] as $border) {
+            $xml .= '<w:'.$border.' w:val="single" w:sz="4" w:color="D9D9D9"/>';
+        }
+        $xml .= '</w:tblBorders><w:tblCellMar><w:top w:w="60" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/>'.
+            '<w:left w:w="60" w:type="dxa"/><w:right w:w="60" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>';
+        foreach ($widths as $width) $xml .= '<w:gridCol w:w="'.$width.'"/>';
+        $xml .= '</w:tblGrid>';
         foreach ($rows as $i => $row) {
-            $xml .= '<w:tr>';
-            foreach ($row as $value) {
-                $xml .= '<w:tc><w:tcPr><w:tcW w:w="1800" w:type="dxa"/></w:tcPr>'.
-                    $this->wordParagraph($value, $i === 0 ? '<w:rPr><w:b/></w:rPr>' : '').'</w:tc>';
+            $xml .= '<w:tr><w:trPr><w:cantSplit/>'.($i === 0 ? '<w:tblHeader/>' : '').'</w:trPr>';
+            foreach ($row as $column => $value) {
+                $xml .= '<w:tc><w:tcPr><w:tcW w:w="'.$widths[$column].'" w:type="dxa"/><w:vAlign w:val="center"/>'.
+                    ($i === 0 ? '<w:shd w:fill="E6EDF4"/>' : '').'</w:tcPr>'.
+                    $this->wordParagraph($value, '<w:pStyle w:val="TableText"/>', $i === 0 ? '<w:rPr><w:b/></w:rPr>' : '').'</w:tc>';
             }
             $xml .= '</w:tr>';
         }
@@ -256,7 +284,7 @@ class BookExportService
 
     private function docx(string $target, array $snapshot): void
     {
-        $xml = $this->wordParagraph($snapshot['title'], '<w:jc w:val="center"/>');
+        $xml = $this->wordParagraph($snapshot['title'], '<w:pStyle w:val="Title"/>');
         $xml .= $this->wordParagraph('Mata uang: '.($snapshot['currency'] ?? ''));
         if (isset($snapshot['closing'])) {
             $xml .= $this->wordParagraph('Closing v'.($snapshot['closing']['version'] ?? '').' · '.
@@ -297,19 +325,27 @@ class BookExportService
                 '<Default Extension="xml" ContentType="application/xml"/>'.
                 '<Default Extension="png" ContentType="image/png"/>'.
                 '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'.
+                '<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>'.
                 '</Types>');
             $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?>'.
                 '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'.
                 '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'.
                 '</Relationships>');
             $zip->addFromString('word/document.xml', $document);
+            $zip->addFromString('word/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>'.
+                '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'.
+                '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="22"/><w:color w:val="000000"/></w:rPr></w:rPrDefault></w:docDefaults>'.
+                '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr></w:style>'.
+                '<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:pPr><w:jc w:val="center"/><w:keepNext/><w:spacing w:after="240"/></w:pPr><w:rPr><w:b/><w:sz w:val="40"/><w:color w:val="000000"/></w:rPr></w:style>'.
+                '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/></w:pPr><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="000000"/></w:rPr></w:style>'.
+                '<w:style w:type="paragraph" w:styleId="TableText"><w:name w:val="Table Text"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="16"/></w:rPr></w:style></w:styles>');
+            $relationships = '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'.
+                '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>';
             if ($chart) {
                 $zip->addFromString('word/media/kpi-chart.png', $chart);
-                $zip->addFromString('word/_rels/document.xml.rels', '<?xml version="1.0" encoding="UTF-8"?>'.
-                    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'.
-                    '<Relationship Id="rIdKpi" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/kpi-chart.png"/>'.
-                    '</Relationships>');
+                $relationships .= '<Relationship Id="rIdKpi" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/kpi-chart.png"/>';
             }
+            $zip->addFromString('word/_rels/document.xml.rels', $relationships.'</Relationships>');
         } finally {
             $zip->close();
         }

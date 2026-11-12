@@ -10,11 +10,11 @@ use Illuminate\Validation\ValidationException;
 class AccountProfile extends Page
 {
     protected static ?string $slug = 'profile'; // Preserve the former profile URL for existing bookmarks.
-    protected static ?string $navigationIcon = 'heroicon-o-user-circle';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-user-circle';
     protected static ?string $navigationLabel = 'Profil Saya';
     protected static ?string $title = 'Profil Saya';
-    protected static ?string $navigationGroup = 'Akun';
-    protected static string $view = 'filament.pages.account-profile';
+    protected static string|\UnitEnum|null $navigationGroup = 'Akun';
+    protected string $view = 'filament.pages.account-profile';
 
     public string $name = '';
     public string $email = '';
@@ -42,7 +42,7 @@ class AccountProfile extends Page
             $user->email_verified_at = null;
         }
         $user->save();
-        $this->notify('success', 'Profil berhasil diperbarui.');
+        \Filament\Notifications\Notification::make()->success()->title('Profil berhasil diperbarui.')->send();
     }
 
     public function changePassword(): void
@@ -58,6 +58,6 @@ class AccountProfile extends Page
         $user->password = Hash::make($this->newPassword);
         $user->save();
         $this->reset(['currentPassword', 'newPassword', 'newPassword_confirmation']);
-        $this->notify('success', 'Kata sandi telah diperbarui.');
+        \Filament\Notifications\Notification::make()->success()->title('Kata sandi telah diperbarui.')->send();
     }
 }

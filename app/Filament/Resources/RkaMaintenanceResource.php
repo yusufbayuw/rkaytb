@@ -2,14 +2,16 @@
 
 namespace App\Filament\Resources;
 
+use Filament\Actions;
+
 use Closure;
 use App\Models\RkaMaintenance;
 use Filament\Forms;
 use App\Models\Akun;
 use App\Models\Unit;
 use Filament\Tables;
-use Filament\Resources\Form;
-use Filament\Resources\Table;
+use Filament\Schemas\Schema as Form;
+use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
@@ -24,7 +26,7 @@ use App\Filament\Resources\RkaMaintenanceResource\Pages;
 use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\RkaMaintenanceResource\RelationManagers;
-use AlperenErsoy\FilamentExport\Actions\FilamentExportHeaderAction;
+use App\Filament\Actions\LegacyExportAction;
 use App\Models\Setting;
 
 class RkaMaintenanceResource extends Resource
@@ -37,7 +39,7 @@ class RkaMaintenanceResource extends Resource
 
     public static function canCreate(): bool
     {
-        return \App\Support\LegacyRkaAccess::canView(auth()->user())
+        return \App\Support\LegacyRkaAccess::canWrite(auth()->user())
             && parent::canCreate();
     }
 
@@ -49,13 +51,13 @@ class RkaMaintenanceResource extends Resource
 
     public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
     {
-        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
+        return \App\Support\LegacyRkaAccess::canWrite(auth()->user()) && \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
             && parent::canEdit($record);
     }
 
     public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
     {
-        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
+        return \App\Support\LegacyRkaAccess::canWrite(auth()->user()) && \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
             && parent::canDelete($record);
     }
 
@@ -67,13 +69,13 @@ class RkaMaintenanceResource extends Resource
 
     protected static ?string $modelLabel = 'Rka Maintenance';
 
-    protected static ?string $navigationIcon = 'heroicon-o-scissors';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-scissors';
 
     protected static ?string $slug = 'rka-maintenance';
 
     protected static ?string $navigationLabel = 'RKA Maintenance';
 
-    protected static ?string $navigationGroup = 'Rencana Kerja & Anggaran';
+    protected static string|\UnitEnum|null $navigationGroup = 'Rencana Kerja & Anggaran';
 
     public static function getEloquentQuery(): Builder
     {
@@ -138,7 +140,7 @@ class RkaMaintenanceResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Uraian')
+                \Filament\Schemas\Components\Section::make('Uraian')
                     ->schema([
                         TextInput::make('nomor_akun')
                             ->maxLength(255)
@@ -151,13 +153,14 @@ class RkaMaintenanceResource extends Resource
                             ->options(
                                 Unit::all()->pluck('nama', 'id')
                             )->default(auth()->user()->unit_id)
-                            ->disabled(!(auth()->user()->hasRole('superadmin'))),
+                            ->disabled(!(auth()->user()->hasRole('superadmin')))->dehydrated()
+                            ->dehydrateStateUsing(fn ($state) => auth()->user()->hasRole('superadmin') ? $state : auth()->user()->unit_id),
                         Toggle::make('is_parent')
                             ->required()
                             ->default(false)
                             ->reactive()
                             ->afterStateUpdated(
-                                function (Closure $get, $set) {
+                                function (\Filament\Schemas\Components\Utilities\Get $get, $set) {
                                     if ($get('is_parent')) {
                                         if ($get('parent_id') !== null) {
                                             $user = RkaMaintenance::find($get('parent_id'))->ancestors;
@@ -176,7 +179,7 @@ class RkaMaintenanceResource extends Resource
                             ->label('Anggaran ini menginduk ke')
                             ->reactive()
                             ->options(
-                                function (Closure $get) {
+                                function (\Filament\Schemas\Components\Utilities\Get $get) {
                                     if (auth()->user()->hasRole('superadmin')) {
                                         if ($get('is_parent')) {
                                             return RkaMaintenance::where('is_parent', true)->where('id', '!=', ($get('id')))->where('unit_nama', $get('unit_nama'))->tree()->depthFirst()->pluck('uraian_view', 'id');
@@ -192,7 +195,7 @@ class RkaMaintenanceResource extends Resource
                                     }
                                 }
                             )->afterStateUpdated(
-                                function (Closure $get, $set, $state) {
+                                function (\Filament\Schemas\Components\Utilities\Get $get, $set, $state) {
                                     if ($get('is_parent')) {
                                         if ($state !== null) {
                                             $user = RkaMaintenance::find($state)->ancestors;
@@ -207,17 +210,12 @@ class RkaMaintenanceResource extends Resource
                         Hidden::make('uraian_view'),
 
                     ]),
-                Forms\Components\Section::make('Rincian')
+                \Filament\Schemas\Components\Section::make('Rincian')
                     ->schema([
                         TextInput::make('volume')
                             ->debounce('1500ms')
                             ->numeric()
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),)
-                            ->afterStateUpdated(function (Closure $get, $state, $set) {
+                            ->afterStateUpdated(function (\Filament\Schemas\Components\Utilities\Get $get, $state, $set) {
                                 $volume = $get('harga_satuan');
                                 if (($volume > 0) && ($state > 0)) {
                                     $total_ = $volume * $state;
@@ -235,12 +233,7 @@ class RkaMaintenanceResource extends Resource
                         TextInput::make('harga_satuan')
                             ->numeric()
                             ->debounce('1500ms')
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),)
-                            ->afterStateUpdated(function (Closure $get, $state, $set) {
+                            ->afterStateUpdated(function (\Filament\Schemas\Components\Utilities\Get $get, $state, $set) {
                                 $volume = $get('volume');
                                 if (($volume > 0) && ($state > 0)) {
                                     $total_ = $volume * $state;
@@ -258,111 +251,51 @@ class RkaMaintenanceResource extends Resource
                         Hidden::make('total'),
                         Toggle::make('is_detail')
                             ->required()
-                            ->hidden(fn (Closure $get) => !($get('total') > 0))
+                            ->hidden(fn (\Filament\Schemas\Components\Utilities\Get $get) => !($get('total') > 0))
                             ->reactive()
                             ->label('Buat Rincian Bulanan'),
-                        Forms\Components\Section::make('Rencana Bulanan')
+                        \Filament\Schemas\Components\Section::make('Rencana Bulanan')
                             ->schema([
                                 TextInput::make('januari')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                    ->default(0),
                                 TextInput::make('februari')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                    ->default(0),
                                 TextInput::make('maret')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                    ->default(0),
                                 TextInput::make('april')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                    ->default(0),
                                 TextInput::make('mei')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                    ->default(0),
                                 TextInput::make('juni')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                    ->default(0),
                                 TextInput::make('juli')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                    ->default(0),
                                 TextInput::make('agustus')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                    ->default(0),
                                 TextInput::make('september')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                    ->default(0),
                                 TextInput::make('oktober')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                    ->default(0),
                                 TextInput::make('november')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
+                                    ->default(0),
                                 TextInput::make('desember')
                                     ->numeric()
-                                    ->default(0)
-                                    ->mask(fn (TextInput\Mask $mask) => $mask
-                                        ->numeric()
-                                        ->decimalPlaces(2)
-                                        ->decimalSeparator('.')
-                                        ->thousandsSeparator(','),),
-                            ])->hidden(function (Closure $get) {
+                                    ->default(0),
+                            ])->hidden(function (\Filament\Schemas\Components\Utilities\Get $get) {
                                 return (!$get('is_detail'));
                             }),
-                    ])->hidden(function (Closure $get) {
+                    ])->hidden(function (\Filament\Schemas\Components\Utilities\Get $get) {
                         return $get('is_parent');
                     }),
 
@@ -373,12 +306,13 @@ class RkaMaintenanceResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->paginationPageOptions([50, 100, 200, 300, 500])->defaultPaginationPageOption(50)
             ->columns([
-                (Setting::find(2)->valbool) ? TextColumn::make('nomor_akun')->formatStateUsing(function (RkaMaintenance $record) { return (($record->is_parent) ? '' : 'Mai-'.str_pad($record->id, 6, '0', STR_PAD_LEFT));}) : ((auth()->user()->hasRole(['superadmin', 'admin-keuangan'])) ? SelectColumn::make('nomor_akun')->options(Akun::all()->pluck('nama', 'id')) : TextColumn::make('nomor_akun')),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('uraian') : TextColumn::make('uraian')
+                (Setting::flag(2)) ? TextColumn::make('nomor_akun')->formatStateUsing(function (RkaMaintenance $record) { return (($record->is_parent) ? '' : 'Mai-'.str_pad($record->id, 6, '0', STR_PAD_LEFT));}) : ((auth()->user()->hasRole(['superadmin', 'admin-keuangan'])) ? SelectColumn::make('nomor_akun')->disabled(fn ($record) => !static::canEdit($record))->options(Akun::all()->pluck('nama', 'id')) : TextColumn::make('nomor_akun')),
+                (auth()->user()->is_editmode) ? TextInputColumn::make('uraian')->disabled(fn ($record) => !static::canEdit($record)) : TextColumn::make('uraian')
                     ->icon(function (RkaMaintenance $record) {
                         if (!$record->is_parent && $record->parent_id !== null) {
-                            return 'heroicon-o-dots-horizontal';
+                            return 'heroicon-o-ellipsis-horizontal';
                         }
                     })
                     ->weight(function (RkaMaintenance $record) {
@@ -398,11 +332,11 @@ class RkaMaintenanceResource extends Resource
                 TextColumn::make('unit_nama')
                     ->label('Unit')
                     ->formatStateUsing(fn ($state) => Unit::find($state)->nama),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('volume')->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('volume')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('volume')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('volume')
                     ->formatStateUsing(fn ($state) => ($state !== null) ? number_format((float)$state) : null)
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? SelectColumn::make('satuan')->options(config('conf_variable.satuan')) : TextColumn::make('satuan'),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('harga_satuan')->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('harga_satuan')
+                (auth()->user()->is_editmode) ? SelectColumn::make('satuan')->disabled(fn ($record) => !static::canEdit($record))->options(config('conf_variable.satuan')) : TextColumn::make('satuan'),
+                (auth()->user()->is_editmode) ? TextInputColumn::make('harga_satuan')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('harga_satuan')
                     ->formatStateUsing(fn ($state) => ($state !== null) ? number_format((float)$state) : null)
                     ->alignRight(),
                 TextColumn::make('total')
@@ -456,7 +390,7 @@ class RkaMaintenanceResource extends Resource
                             }
                         }
                     }),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('januari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('januari')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('januari')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('januari')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumJanuari(); // Read-only display; totals synchronize on save.
@@ -486,7 +420,7 @@ class RkaMaintenanceResource extends Resource
                         }
                     })
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('februari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('februari')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('februari')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('februari')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumFebruari(); // Read-only display; totals synchronize on save.
@@ -516,7 +450,7 @@ class RkaMaintenanceResource extends Resource
                         }
                     })
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('maret')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('maret')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('maret')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('maret')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumMaret(); // Read-only display; totals synchronize on save.
@@ -546,7 +480,7 @@ class RkaMaintenanceResource extends Resource
                         }
                     })
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('april')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('april')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('april')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('april')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumApril(); // Read-only display; totals synchronize on save.
@@ -576,7 +510,7 @@ class RkaMaintenanceResource extends Resource
                         }
                     })
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('mei')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('mei')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('mei')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('mei')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumMei(); // Read-only display; totals synchronize on save.
@@ -606,7 +540,7 @@ class RkaMaintenanceResource extends Resource
                         }
                     })
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('juni')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juni')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('juni')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juni')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumJuni(); // Read-only display; totals synchronize on save.
@@ -636,7 +570,7 @@ class RkaMaintenanceResource extends Resource
                         }
                     })
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('juli')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juli')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('juli')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juli')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumJuli(); // Read-only display; totals synchronize on save.
@@ -666,7 +600,7 @@ class RkaMaintenanceResource extends Resource
                         }
                     })
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('agustus')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('agustus')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('agustus')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('agustus')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumAgustus(); // Read-only display; totals synchronize on save.
@@ -696,7 +630,7 @@ class RkaMaintenanceResource extends Resource
                         }
                     })
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('september')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('september')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('september')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('september')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumSeptember(); // Read-only display; totals synchronize on save.
@@ -726,7 +660,7 @@ class RkaMaintenanceResource extends Resource
                         }
                     })
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('oktober')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('oktober')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('oktober')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('oktober')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumOktober(); // Read-only display; totals synchronize on save.
@@ -756,7 +690,7 @@ class RkaMaintenanceResource extends Resource
                         }
                     })
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('november')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('november')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('november')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('november')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumNovember(); // Read-only display; totals synchronize on save.
@@ -786,7 +720,7 @@ class RkaMaintenanceResource extends Resource
                         }
                     })
                     ->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('desember')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('desember')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('desember')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('desember')
                     ->formatStateUsing(function (RkaMaintenance $record, $state) {
                         if ($record->is_parent) {
                             $jumlah = $record->childrenScoreSumDesember(); // Read-only display; totals synchronize on save.
@@ -824,28 +758,25 @@ class RkaMaintenanceResource extends Resource
             ->filters([
                 //
             ])
-            ->actions([
-                Tables\Actions\Action::make('duplikat')->action(function (RkaMaintenance $record) {
+            ->recordActions([
+                Actions\Action::make('duplikat')->action(function (RkaMaintenance $record) {
+                    abort_unless(static::canEdit($record), 403);
                     $data = RkaMaintenance::find($record->id);
-                    $newData = $data->replicate();
+                    $newData = $data->replicate(['depth', 'path']);
+                    \MrAdder\FilamentLogger\Support\ReplicationContextStore::remember($newData, $data);
                     $newData->uraian = $data->uraian . ' COPY';
                     $newData->save();
-                })->icon('heroicon-s-duplicate')->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
-                Tables\Actions\ViewAction::make()->hidden(!(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool)),
-                Tables\Actions\EditAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
-                Tables\Actions\DeleteAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
+                })->icon('heroicon-s-document-duplicate')->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::flag(1)),
+                Actions\ViewAction::make()->hidden(!(auth()->user()->hasRole('admin-keuangan') || Setting::flag(1))),
+                Actions\EditAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::flag(1)),
+                Actions\DeleteAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::flag(1)),
             ])
-            ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
+            ->toolbarActions([
+                Actions\DeleteBulkAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::flag(1)),
             ])
             ->headerActions([
-                FilamentExportHeaderAction::make('Export'),
+                LegacyExportAction::make('export'),
             ]);
-    }
-
-    protected function paginateTableQuery(Builder $query): Paginator
-    {
-        return $query->fastPaginate($this->getTableRecordsPerPage());
     }
 
     public static function getPages(): array

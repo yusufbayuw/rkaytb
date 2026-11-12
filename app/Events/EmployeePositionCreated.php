@@ -17,6 +17,8 @@ class EmployeePositionCreated
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
+    public Employee $employee;
+
     /**
      * Create a new event instance.
      */

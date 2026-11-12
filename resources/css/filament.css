@@ -1,1 +1,7 @@
-@import '../../vendor/filament/filament/resources/css/app.css';
+@import '../../vendor/filament/filament/resources/css/theme.css';
+@source '../../app/Filament';
+@source '../views';
+@source '../../vendor/bezhansalleh/filament-shield/resources';
+@source '../../vendor/mradder/filament-logger/resources';
+@source '../../vendor/shuvroroy/filament-spatie-laravel-health/resources';
+@source '../../vendor/achyutn/filament-log-viewer/resources';

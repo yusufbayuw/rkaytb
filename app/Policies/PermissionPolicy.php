@@ -29,7 +29,7 @@ class PermissionPolicy
      */
     public function create(User $user): bool
     {
-        return $user->hasAnyPermission('create:permission');
+        return \App\Support\SystemAccess::allowed();
     }
 
     /**
@@ -37,7 +37,7 @@ class PermissionPolicy
      */
     public function update(User $user, Permission $permission): bool
     {
-        return $user->hasAnyPermission('update:permission');
+        return \App\Support\SystemAccess::allowed();
     }
 
     /**
@@ -45,6 +45,6 @@ class PermissionPolicy
      */
     public function delete(User $user, Permission $permission): bool
     {
-        return $user->hasAnyPermission('delete:permission');
+        return \App\Support\SystemAccess::allowed();
     }
 }

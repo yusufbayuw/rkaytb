@@ -25,11 +25,11 @@ class RkaPlatformWorkspace extends Page
 {
     use WithFileUploads;
 
-    protected static ?string $navigationIcon = 'heroicon-o-document-text';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-document-text';
     protected static ?string $navigationLabel = 'Workspace RKA';
-    protected static ?string $navigationGroup = 'Rencana Kerja & Anggaran';
+    protected static string|\UnitEnum|null $navigationGroup = 'Rencana Kerja & Anggaran';
     protected static ?int $navigationSort = 2;
-    protected static string $view = 'filament.pages.rka-platform-workspace';
+    protected string $view = 'filament.pages.rka-platform-workspace';
 
     public ?int $organizationId = null;
     public ?int $cycleId = null;
@@ -143,6 +143,19 @@ class RkaPlatformWorkspace extends Page
     private function access(): TenantAccess { return app(TenantAccess::class); }
     private function audit(): AuditTrail { return app(AuditTrail::class); }
 
+    private function resetWorkspaceDrafts(): void
+    {
+        $keep = ['organizationId', 'cycleId', 'orgBrand', 'orgCurrency', 'orgLocale', 'orgTimezone', 'orgColor'];
+        $fields = [];
+        foreach ((new \ReflectionClass(self::class))->getProperties(\ReflectionProperty::IS_PUBLIC) as $property) {
+            if ($property->getDeclaringClass()->getName() === self::class && !$property->isStatic() && !in_array($property->getName(), $keep, true)) {
+                $fields[] = $property->getName();
+            }
+        }
+        $this->reset($fields);
+        $this->resetValidation();
+    }
+
     private function orgId(): int
     {
         if (!$this->organizationId) abort(403, 'Belum mempunyai organisasi.');
@@ -197,14 +210,16 @@ class RkaPlatformWorkspace extends Page
             $this->audit()->record($org->id, (int)auth()->id(), 'organization.created', 'organization', $org->id);
             $this->organizationId = $org->id;
         });
-        $this->orgName = '';
+        $this->cycleId = null;
+        $this->resetWorkspaceDrafts();
         $this->loadBranding();
-        $this->notify('success', 'Organisasi dibuat.');
+        \Filament\Notifications\Notification::make()->success()->title('Organisasi dibuat.')->send();
     }
 
     public function selectOrganization(int $id): void
     {
         $this->access()->membership($id, (int)auth()->id());
+        $this->resetWorkspaceDrafts();
         $this->organizationId = $id;
         $this->cycleId = Cycle::query()->where('organization_id', $id)->latest('id')->value('id');
         $this->instanceId = $this->bookId = $this->sectionId = null;
@@ -253,7 +268,7 @@ class RkaPlatformWorkspace extends Page
             'primary_color' => $this->orgColor,
         ]);
         $this->audit()->record($org->id, (int)auth()->id(), 'organization.branding_updated', 'organization', $org->id);
-        $this->notify('success', 'Pengaturan organisasi diperbarui.');
+        \Filament\Notifications\Notification::make()->success()->title('Pengaturan organisasi diperbarui.')->send();
     }
 
     public function addMember(): void
@@ -285,7 +300,7 @@ class RkaPlatformWorkspace extends Page
         $this->audit()->record($this->orgId(), (int)auth()->id(), 'membership.assigned', 'membership', $membership->id, ['role' => $this->memberRole]);
         $this->memberEmail = '';
         $this->memberUnitId = null;
-        $this->notify('success', 'Anggota ditambahkan.');
+        \Filament\Notifications\Notification::make()->success()->title('Anggota ditambahkan.')->send();
     }
 
     public function addWorkflowRole(): void
@@ -295,7 +310,7 @@ class RkaPlatformWorkspace extends Page
         app(OrganizationRoleCatalog::class)->add($this->orgId(), (int)auth()->id(),
             $this->newWorkflowRoleCode, $this->newWorkflowRoleLabel);
         $this->newWorkflowRoleCode = $this->newWorkflowRoleLabel = '';
-        $this->notify('success', 'Role kerja organisasi tersedia untuk penugasan dan matriks approval.');
+        \Filament\Notifications\Notification::make()->success()->title('Role kerja organisasi tersedia untuk penugasan dan matriks approval.')->send();
     }
 
     public function createUnit(): void
@@ -308,7 +323,7 @@ class RkaPlatformWorkspace extends Page
         ]);
         $this->audit()->record($this->orgId(), (int)auth()->id(), 'unit.created', 'unit', $unit->id);
         $this->unitCode = $this->unitName = '';
-        $this->notify('success', 'Unit dibuat.');
+        \Filament\Notifications\Notification::make()->success()->title('Unit dibuat.')->send();
     }
 
     private function loadKpiProfile(): void
@@ -363,7 +378,7 @@ class RkaPlatformWorkspace extends Page
         $this->kpiSharingAlreadyInExpense = (bool)($profile['sharing_already_in_expense'] ?? false);
         $this->audit()->record($cycle->organization_id, (int)auth()->id(), 'kpi_profile.updated', 'cycle', $cycle->id);
         $this->prepareFinancialDraft();
-        $this->notify('success', 'Profil KPI disimpan untuk siklus ini.');
+        \Filament\Notifications\Notification::make()->success()->title('Profil KPI disimpan untuk siklus ini.')->send();
     }
 
     public function createCycle(): void
@@ -393,14 +408,16 @@ class RkaPlatformWorkspace extends Page
             'settings' => $settings,
         ]);
         $this->cycleId = $cycle->id;
+        $this->resetWorkspaceDrafts();
         $this->loadKpiProfile();
         $this->audit()->record($this->orgId(), (int)auth()->id(), 'cycle.created', 'cycle', $cycle->id);
-        $this->notify('success', 'Siklus RKA dibuat.');
+        \Filament\Notifications\Notification::make()->success()->title('Siklus RKA dibuat.')->send();
     }
 
     public function selectCycle(int $id): void
     {
         Cycle::query()->where('organization_id', $this->orgId())->findOrFail($id);
+        $this->resetWorkspaceDrafts();
         $this->cycleId = $id;
         $this->instanceId = $this->bookId = $this->sectionId = null;
         $this->loadKpiProfile();
@@ -446,7 +463,7 @@ class RkaPlatformWorkspace extends Page
         $this->audit()->record($this->orgId(), (int)auth()->id(), 'question.created', 'question', $question->id);
         $this->newQuestionId = $question->id;
         $this->questionCode = $this->questionText = '';
-        $this->notify('success', 'Pertanyaan ditambahkan.');
+        \Filament\Notifications\Notification::make()->success()->title('Pertanyaan ditambahkan.')->send();
     }
 
     public function assignQuestionsAutomatically(): void
@@ -454,8 +471,8 @@ class RkaPlatformWorkspace extends Page
         $this->managers();
         $result = app(\App\Services\RkaPlatform\QuestionAssignmentAutomation::class)
             ->assign($this->cycle(), (int)auth()->id());
-        $this->notify('success', $result['created'].' penugasan dibuat otomatis; '.
-            $result['skipped'].' dilewati (sudah ada, tidak cocok, atau penanggung jawab ambigu).');
+        \Filament\Notifications\Notification::make()->success()->title($result['created'].' penugasan dibuat otomatis; '.
+            $result['skipped'].' dilewati (sudah ada, tidak cocok, atau penanggung jawab ambigu).')->send();
     }
 
     public function createInstance(): void
@@ -489,7 +506,7 @@ class RkaPlatformWorkspace extends Page
         ]);
         $this->instanceId = $instance->id;
         $this->audit()->record($this->orgId(), (int)auth()->id(), 'question.assigned', 'question_instance', $instance->id);
-        $this->notify('success', 'Pertanyaan ditugaskan.');
+        \Filament\Notifications\Notification::make()->success()->title('Pertanyaan ditugaskan.')->send();
     }
 
     public function selectInstance(int $id): void
@@ -512,21 +529,21 @@ class RkaPlatformWorkspace extends Page
     {
         $this->validate(['inviteUserId' => 'required|integer', 'inviteDays' => 'required|integer|between:1,30']);
         app(ContributionService::class)->invite($this->instance(), (int)auth()->id(), $this->inviteUserId, $this->inviteDays);
-        $this->notify('success', 'Undangan dibuat.');
+        \Filament\Notifications\Notification::make()->success()->title('Undangan dibuat.')->send();
     }
 
     public function acceptInvite(int $id): void
     {
         $invite = Invitation::query()->where('organization_id', $this->orgId())->findOrFail($id);
         app(ContributionService::class)->accept($invite, (int)auth()->id());
-        $this->notify('success', 'Undangan diterima.');
+        \Filament\Notifications\Notification::make()->success()->title('Undangan diterima.')->send();
     }
 
     public function revokeInvite(int $id): void
     {
         $invite = $this->instance()->invitations()->findOrFail($id);
         app(ContributionService::class)->revoke($invite, (int)auth()->id());
-        $this->notify('success', 'Undangan dicabut.');
+        \Filament\Notifications\Notification::make()->success()->title('Undangan dicabut.')->send();
     }
 
     public function uploadAnswerEvidence(): void
@@ -538,7 +555,7 @@ class RkaPlatformWorkspace extends Page
             ->where('author_id', auth()->id())->orderByDesc('revision')->firstOrFail();
         app(EvidenceService::class)->upload($answer, (int)auth()->id(), $this->answerEvidenceFile);
         $this->answerEvidenceFile = null;
-        $this->notify('success', 'Bukti disimpan secara privat untuk verifikasi.');
+        \Filament\Notifications\Notification::make()->success()->title('Bukti disimpan secara privat untuk verifikasi.')->send();
     }
 
     public function verifyEvidence(int $id): void
@@ -546,7 +563,7 @@ class RkaPlatformWorkspace extends Page
         $evidence = EvidenceRecord::query()->where('organization_id', $this->orgId())
             ->where('instance_id', $this->instance()->id)->findOrFail($id);
         app(EvidenceService::class)->verify($evidence, (int)auth()->id());
-        $this->notify('success', 'Bukti diverifikasi.');
+        \Filament\Notifications\Notification::make()->success()->title('Bukti diverifikasi.')->send();
     }
 
     public function submitAnswer(): void
@@ -556,7 +573,7 @@ class RkaPlatformWorkspace extends Page
             $this->instance(), (int)auth()->id(), $this->answerText, $this->answerRevision
         );
         $this->answerRevision = $answer->revision;
-        $this->notify('success', 'Jawaban disimpan dengan revisi baru.');
+        \Filament\Notifications\Notification::make()->success()->title('Jawaban disimpan dengan revisi baru.')->send();
     }
 
     public function synthesize(): void
@@ -565,14 +582,14 @@ class RkaPlatformWorkspace extends Page
         app(ContributionService::class)->synthesize(
             $this->instance(), (int)auth()->id(), $this->synthesisText, $this->synthesisAnswerIds
         );
-        $this->notify('success', 'Sintesis diajukan untuk review.');
+        \Filament\Notifications\Notification::make()->success()->title('Sintesis diajukan untuk review.')->send();
     }
 
     public function verifySynthesis(int $id): void
     {
         $synthesis = Synthesis::query()->where('organization_id', $this->orgId())->findOrFail($id);
         app(ContributionService::class)->verify($synthesis, (int)auth()->id());
-        $this->notify('success', 'Sintesis diverifikasi.');
+        \Filament\Notifications\Notification::make()->success()->title('Sintesis diverifikasi.')->send();
     }
 
     /** Financial edits are committed before optional draft preparation. */
@@ -604,7 +621,7 @@ class RkaPlatformWorkspace extends Page
         $this->audit()->record($this->orgId(), (int)auth()->id(), 'budget.created', 'budget_line', $line->id);
         $this->lineName = $this->lineAmount = '';
         $this->prepareFinancialDraft();
-        $this->notify('success', 'Baris anggaran draft dibuat.');
+        \Filament\Notifications\Notification::make()->success()->title('Baris anggaran draft dibuat.')->send();
     }
 
     public function createPool(): void
@@ -626,7 +643,7 @@ class RkaPlatformWorkspace extends Page
         $this->poolName = $this->poolCode = $this->poolAmount = '';
         $this->poolDrivers = [];
         $this->prepareFinancialDraft();
-        $this->notify('success', 'Alokasi draft dihitung.');
+        \Filament\Notifications\Notification::make()->success()->title('Alokasi draft dihitung.')->send();
     }
 
     public function approveBudget(int $id): void
@@ -635,7 +652,7 @@ class RkaPlatformWorkspace extends Page
             ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
         app(FinancialApprovalService::class)->approveBudget($line, (int)auth()->id());
         $this->prepareFinancialDraft();
-        $this->notify('success', 'Anggaran disetujui.');
+        \Filament\Notifications\Notification::make()->success()->title('Anggaran disetujui.')->send();
     }
 
     public function approvePool(int $id): void
@@ -644,7 +661,7 @@ class RkaPlatformWorkspace extends Page
             ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
         app(FinancialApprovalService::class)->approvePool($pool, (int)auth()->id());
         $this->prepareFinancialDraft();
-        $this->notify('success', 'Alokasi disetujui.');
+        \Filament\Notifications\Notification::make()->success()->title('Alokasi disetujui.')->send();
     }
 
     public function proposeSharingImpact(): void
@@ -662,7 +679,7 @@ class RkaPlatformWorkspace extends Page
         app(SharingImpactGovernance::class)->propose($pool, (int)auth()->id(),
             $this->impactChangeType, $this->impactTier, $this->impactReason, $this->impactDueAt);
         $this->impactReason = '';
-        $this->notify('success', 'Penilaian dampak diajukan; penilai independen wajib mengesahkan.');
+        \Filament\Notifications\Notification::make()->success()->title('Penilaian dampak diajukan; penilai independen wajib mengesahkan.')->send();
     }
 
     public function approveSharingImpact(int $id): void
@@ -674,7 +691,7 @@ class RkaPlatformWorkspace extends Page
         $pool = SharedPool::where('organization_id',$this->orgId())
             ->where('cycle_id',$this->cycle()->id)->findOrFail($impact->pool_id);
         app(SharingImpactGovernance::class)->approveAssessment($pool, $id, (int)auth()->id());
-        $this->notify('success', 'Penilaian dampak telah disahkan.');
+        \Filament\Notifications\Notification::make()->success()->title('Penilaian dampak telah disahkan.')->send();
     }
 
     public function proposeSharingReviewEscalation(): void
@@ -689,7 +706,7 @@ class RkaPlatformWorkspace extends Page
         app(SharingImpactGovernance::class)->proposeEscalation($pool,
             $this->reviewEscalationUnitId, (int)auth()->id(), $this->reviewEscalationReason);
         $this->reviewEscalationReason = '';
-        $this->notify('success', 'Eskalasi review diajukan; perlu pengesah independen.');
+        \Filament\Notifications\Notification::make()->success()->title('Eskalasi review diajukan; perlu pengesah independen.')->send();
     }
 
     public function approveSharingReviewEscalation(int $id): void
@@ -701,7 +718,7 @@ class RkaPlatformWorkspace extends Page
         $pool = SharedPool::where('organization_id',$this->orgId())
             ->where('cycle_id',$this->cycle()->id)->findOrFail($escalation->pool_id);
         app(SharingImpactGovernance::class)->approveEscalation($pool,$id,(int)auth()->id());
-        $this->notify('success','Eskalasi disahkan dengan dua pengambil keputusan.');
+        \Filament\Notifications\Notification::make()->success()->title('Eskalasi disahkan dengan dua pengambil keputusan.')->send();
     }
 
     public function consentSharedPool(int $id): void
@@ -710,7 +727,7 @@ class RkaPlatformWorkspace extends Page
             ->where('cycle_id', $this->cycle()->id)->findOrFail($id);
         app(\App\Services\RkaPlatform\SharedPoolUnitConsentService::class)
             ->sign($pool, (int)auth()->id());
-        $this->notify('success', 'Persetujuan unit untuk versi alokasi ini tercatat.');
+        \Filament\Notifications\Notification::make()->success()->title('Persetujuan unit untuk versi alokasi ini tercatat.')->send();
     }
 
     public function importJournal(): void
@@ -727,7 +744,7 @@ class RkaPlatformWorkspace extends Page
         );
         $this->journalFile = null;
         $this->prepareFinancialDraft();
-        $this->notify('success', 'Batch XLSX diterima: '.$batch->id.' (status staged).');
+        \Filament\Notifications\Notification::make()->success()->title('Batch XLSX diterima: '.$batch->id.' (status staged).')->send();
     }
 
     public function draftJournalMapping(): void
@@ -745,7 +762,7 @@ class RkaPlatformWorkspace extends Page
             trim($this->mappingCategory) ?: null
         );
         $this->mappingAccount = '';
-        $this->notify('success', 'Mapping tersimpan sebagai draft dan menunggu reviewer independen.');
+        \Filament\Notifications\Notification::make()->success()->title('Mapping tersimpan sebagai draft dan menunggu reviewer independen.')->send();
     }
 
     public function approveJournalMapping(int $id): void
@@ -755,7 +772,7 @@ class RkaPlatformWorkspace extends Page
         if (!$row) abort(404);
         app(FinancialReconciliationService::class)->approveMapping($this->orgId(), $id, (int)auth()->id());
         $this->prepareFinancialDraft();
-        $this->notify('success', 'Mapping diaktifkan.');
+        \Filament\Notifications\Notification::make()->success()->title('Mapping diaktifkan.')->send();
     }
 
     public function verifyJournalBatch(int $id): void
@@ -763,19 +780,19 @@ class RkaPlatformWorkspace extends Page
         $batch = JournalBatch::where('organization_id', $this->orgId())->findOrFail($id);
         app(FinancialReconciliationService::class)->verifyBatch($batch, (int)auth()->id());
         $this->prepareFinancialDraft();
-        $this->notify('success', 'Integritas sumber batch diverifikasi; draf rekonsiliasi disiapkan otomatis.');
+        \Filament\Notifications\Notification::make()->success()->title('Integritas sumber batch diverifikasi; draf rekonsiliasi disiapkan otomatis.')->send();
     }
 
     public function prepareReconciliation(): void
     {
         $id = app(FinancialReconciliationService::class)->prepare($this->cycle(), (int)auth()->id());
-        $this->notify('success', 'Laporan rekonsiliasi #'.$id.' tersimpan. Periksa blocker sebelum mengesahkan.');
+        \Filament\Notifications\Notification::make()->success()->title('Laporan rekonsiliasi #'.$id.' tersimpan. Periksa blocker sebelum mengesahkan.')->send();
     }
 
     public function verifyReconciliation(int $id): void
     {
         app(FinancialReconciliationService::class)->verify($this->cycle(), $id, (int)auth()->id());
-        $this->notify('success', 'Snapshot rekonsiliasi diverifikasi secara independen.');
+        \Filament\Notifications\Notification::make()->success()->title('Snapshot rekonsiliasi diverifikasi secara independen.')->send();
     }
 
     public function updateCycleCloseRisk(): void
@@ -799,7 +816,7 @@ class RkaPlatformWorkspace extends Page
                 'cycle.closing_risk_updated', 'cycle', $locked->id, ['risk' => $this->cycleCloseRisk]);
         });
         $this->prepareFinancialDraft();
-        $this->notify('success', 'Risiko closing disimpan; draf rekonsiliasi diperbarui otomatis.');
+        \Filament\Notifications\Notification::make()->success()->title('Risiko closing disimpan; draf rekonsiliasi diperbarui otomatis.')->send();
     }
 
     public function proposeClosingPolicy(): void
@@ -817,14 +834,14 @@ class RkaPlatformWorkspace extends Page
         app(FinancialClosingService::class)->proposePolicy(
             $this->orgId(), (int)auth()->id(), $this->policyAction, $steps, $this->policyRisk
         );
-        $this->notify('success', 'Kebijakan draft dibuat dan memerlukan aktivasi terpisah.');
+        \Filament\Notifications\Notification::make()->success()->title('Kebijakan draft dibuat dan memerlukan aktivasi terpisah.')->send();
     }
 
     public function activateClosingPolicy(int $id): void
     {
         $policy = ApprovalPolicy::where('organization_id',$this->orgId())->findOrFail($id);
         app(FinancialClosingService::class)->activatePolicy($policy, (int)auth()->id());
-        $this->notify('success', 'Kebijakan closing diaktifkan.');
+        \Filament\Notifications\Notification::make()->success()->title('Kebijakan closing diaktifkan.')->send();
     }
 
     public function submitCycleApproval(string $action): void
@@ -835,7 +852,7 @@ class RkaPlatformWorkspace extends Page
             $this->cycle(), (int)auth()->id(), $action, $this->cycleApprovalReason
         );
         $this->cycleApprovalReason = '';
-        $this->notify('success', 'Permintaan closing/reopen diajukan ke tahap persetujuan pertama.');
+        \Filament\Notifications\Notification::make()->success()->title('Permintaan closing/reopen diajukan ke tahap persetujuan pertama.')->send();
     }
 
     public function decideCycleApproval(int $id, bool $approve): void
@@ -847,7 +864,7 @@ class RkaPlatformWorkspace extends Page
             $req, (int)auth()->id(), $approve, $approve ? '' : $this->approvalDecisionReason
         );
         $this->approvalDecisionReason = '';
-        $this->notify('success', 'Keputusan persetujuan dicatat.');
+        \Filament\Notifications\Notification::make()->success()->title('Keputusan persetujuan dicatat.')->send();
     }
 
     public function raiseSharingDispute(): void
@@ -861,7 +878,7 @@ class RkaPlatformWorkspace extends Page
             $this->disputeReason
         );
         $this->disputeReason = '';
-        $this->notify('success', 'Sengketa tercatat; closing tertahan sampai diselesaikan.');
+        \Filament\Notifications\Notification::make()->success()->title('Sengketa tercatat; closing tertahan sampai diselesaikan.')->send();
     }
 
     public function resolveSharingDispute(int $id): void
@@ -871,7 +888,7 @@ class RkaPlatformWorkspace extends Page
             $this->cycle(), $id, (int)auth()->id(), $this->disputeResolution
         );
         $this->disputeResolution = '';
-        $this->notify('success', 'Resolusi sengketa tercatat untuk audit.');
+        \Filament\Notifications\Notification::make()->success()->title('Resolusi sengketa tercatat untuk audit.')->send();
     }
 
     public function proposeMaterialityPolicy(): void
@@ -883,13 +900,13 @@ class RkaPlatformWorkspace extends Page
         app(MaterialityExceptionService::class)->propose(
             $this->cycle(), (int)auth()->id(), $this->materialityAmount, (int)$this->materialityBasisPoints
         );
-        $this->notify('success', 'Kebijakan materialitas dibuat sebagai draft. Minta aktivasi independen.');
+        \Filament\Notifications\Notification::make()->success()->title('Kebijakan materialitas dibuat sebagai draft. Minta aktivasi independen.')->send();
     }
 
     public function activateMaterialityPolicy(int $id): void
     {
         app(MaterialityExceptionService::class)->activate($this->cycle(), $id, (int)auth()->id());
-        $this->notify('success', 'Batas materialitas disahkan.');
+        \Filament\Notifications\Notification::make()->success()->title('Batas materialitas disahkan.')->send();
     }
 
     public function requestMaterialityException(): void
@@ -901,13 +918,13 @@ class RkaPlatformWorkspace extends Page
             $this->cycle(), $this->exceptionBudgetId, (int)auth()->id(), $this->exceptionReason
         );
         $this->exceptionReason = '';
-        $this->notify('success', 'Pengecualian administratif menunggu persetujuan.');
+        \Filament\Notifications\Notification::make()->success()->title('Pengecualian administratif menunggu persetujuan.')->send();
     }
 
     public function approveMaterialityException(int $id): void
     {
         app(MaterialityExceptionService::class)->approve($this->cycle(), $id, (int)auth()->id());
-        $this->notify('success', 'Pengecualian tercatat dan dibatasi kebijakan materialitas.');
+        \Filament\Notifications\Notification::make()->success()->title('Pengecualian tercatat dan dibatasi kebijakan materialitas.')->send();
     }
 
     public function createTemplate(): void
@@ -935,7 +952,7 @@ class RkaPlatformWorkspace extends Page
         ]);
         $this->newTemplateId = $template->id;
         $this->audit()->record($this->orgId(), (int)auth()->id(), 'template.created', 'book_template', $template->id);
-        $this->notify('success', 'Template dibuat tanpa isi contoh organisasi.');
+        \Filament\Notifications\Notification::make()->success()->title('Template dibuat tanpa isi contoh organisasi.')->send();
     }
 
     public function createBook(): void
@@ -964,7 +981,7 @@ class RkaPlatformWorkspace extends Page
         });
         $this->bookId = $book->id;
         $this->bookTitle = '';
-        $this->notify('success', 'Draft buku dibuat.');
+        \Filament\Notifications\Notification::make()->success()->title('Draft buku dibuat.')->send();
     }
 
     public function selectBook(int $id): void
@@ -988,20 +1005,20 @@ class RkaPlatformWorkspace extends Page
         $section = $this->book()->sections()->findOrFail($this->sectionId);
         $this->validate(['sectionContent' => 'required|string|max:1000000']);
         app(BookPublishingService::class)->saveSection($section, (int)auth()->id(), $this->sectionContent);
-        $this->notify('success', 'Bagian dikirim ke review.');
+        \Filament\Notifications\Notification::make()->success()->title('Bagian dikirim ke review.')->send();
     }
 
     public function approveSection(int $id): void
     {
         $section = $this->book()->sections()->findOrFail($id);
         app(BookPublishingService::class)->approveSection($section, (int)auth()->id());
-        $this->notify('success', 'Bagian disetujui.');
+        \Filament\Notifications\Notification::make()->success()->title('Bagian disetujui.')->send();
     }
 
     public function publishBook(): void
     {
         app(BookPublishingService::class)->publish($this->book(), (int)auth()->id());
-        $this->notify('success', 'Snapshot Buku RKA telah diterbitkan.');
+        \Filament\Notifications\Notification::make()->success()->title('Snapshot Buku RKA telah diterbitkan.')->send();
     }
 
     protected function getViewData(): array

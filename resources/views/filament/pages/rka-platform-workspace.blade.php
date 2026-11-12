@@ -1,4 +1,4 @@
-<x-filament::page>
+<x-filament-panels::page>
     <div class="space-y-6">
         <div class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
             <h2 class="text-xl font-semibold">Workspace RKA</h2>
@@ -16,7 +16,7 @@
             @if($canBootstrap)
                 <form wire:submit.prevent="createOrganization" class="mt-4 flex flex-wrap gap-2 items-end">
                     <div><label class="block text-sm font-medium mb-1">Buat organisasi baru</label>
-                        <input wire:model.defer="orgName" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Nama organisasi" /></div>
+                        <input wire:model="orgName" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Nama organisasi" /></div>
                     <button type="submit" class="px-4 py-2 rounded-lg bg-primary-600 text-white">Buat</button>
                 </form>
             @endif
@@ -32,7 +32,7 @@
                     </div>
                     <div class="text-sm">Siklus aktif:
                         @if($cycles->count())
-                            <select class="border rounded-lg p-2 dark:bg-gray-900" wire:change="selectCycle($event.target.value)">
+                            <select aria-label="Siklus RKA" class="border rounded-lg p-2 dark:bg-gray-900" wire:change="selectCycle($event.target.value)">
                                 @foreach($cycles as $cycle)
                                     <option value="{{ $cycle->id }}" @selected($cycleId === $cycle->id)>{{ $cycle->name }} — {{ $cycle->year }}</option>
                                 @endforeach
@@ -79,37 +79,37 @@
             @endif
 
             @if($isManager)
-                <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                     <summary class="font-semibold cursor-pointer">Identitas Organisasi / White Label</summary>
                     <form wire:submit.prevent="updateBranding" class="grid md:grid-cols-2 gap-3 mt-4">
-                        <div><label class="block text-xs mb-1">Nama tampilan</label><input wire:model.defer="orgBrand" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
-                        <div><label class="block text-xs mb-1">Warna utama (HEX)</label><input wire:model.defer="orgColor" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
-                        <div><label class="block text-xs mb-1">Mata uang (kode ISO)</label><input wire:model.defer="orgCurrency" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
-                        <div><label class="block text-xs mb-1">Locale</label><input wire:model.defer="orgLocale" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
-                        <div><label class="block text-xs mb-1">Zona waktu IANA</label><input wire:model.defer="orgTimezone" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                        <div><label class="block text-xs mb-1">Nama tampilan</label><input wire:model="orgBrand" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                        <div><label class="block text-xs mb-1">Warna utama (HEX)</label><input wire:model="orgColor" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                        <div><label class="block text-xs mb-1">Mata uang (kode ISO)</label><input wire:model="orgCurrency" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                        <div><label class="block text-xs mb-1">Locale</label><input wire:model="orgLocale" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                        <div><label class="block text-xs mb-1">Zona waktu IANA</label><input wire:model="orgTimezone" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
                         <div class="flex items-end"><button type="submit" class="px-4 py-2 rounded-lg bg-primary-600 text-white">Simpan Pengaturan</button></div>
                     </form>
                     <p class="text-xs text-gray-500 mt-3">Logo dokumen dan pengaturan tipografi lanjutan belum tersedia pada tahap ini.</p>
                 </details>
-                <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                     <summary class="font-semibold cursor-pointer">Pengaturan Organisasi, Unit dan Pengguna</summary>
                     <div class="grid lg:grid-cols-3 gap-5 mt-4">
                         <form wire:submit.prevent="createUnit" class="space-y-2">
                             <h3 class="font-medium">Unit</h3>
-                            <input wire:model.defer="unitCode" placeholder="Kode unik unit" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                            <input wire:model.defer="unitName" placeholder="Nama unit" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                            <input wire:model="unitCode" placeholder="Kode unik unit" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                            <input wire:model="unitName" placeholder="Nama unit" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
                             <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Tambah Unit</button>
                         </form>
                         <form wire:submit.prevent="addMember" class="space-y-2">
                             <h3 class="font-medium">Keanggotaan</h3>
-                            <input wire:model.defer="memberEmail" type="email" placeholder="Email akun yang sudah terdaftar" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                            <select wire:model.defer="memberRole" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                            <input wire:model="memberEmail" type="email" placeholder="Email akun yang sudah terdaftar" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                            <select wire:model="memberRole" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                 @foreach($assignableRoles as $code => $label)
                                     <option value="{{ $code }}">{{ $label }}</option>
                                 @endforeach
                             </select>
                             <label class="block text-xs">Lingkup unit (wajib untuk penanggung jawab unit)</label>
-                            <select wire:model.defer="memberUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                            <select wire:model="memberUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                 <option value="">Semua / tanpa unit</option>
                                 @foreach($units as $unit)<option value="{{ $unit->id }}">{{ $unit->name }}</option>@endforeach
                             </select>
@@ -117,23 +117,23 @@
                         </form>
                         <form wire:submit.prevent="createCycle" class="space-y-2">
                             <h3 class="font-medium">Siklus Anggaran</h3>
-                            <input wire:model.defer="cycleName" placeholder="Nama siklus" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                            <input wire:model.defer="cycleYear" type="number" placeholder="Tahun anggaran" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                            <input wire:model="cycleName" placeholder="Nama siklus" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                            <input wire:model="cycleYear" type="number" placeholder="Tahun anggaran" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
                             <label class="text-sm">Awal periode</label>
-                            <input wire:model.defer="cycleStart" type="date" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                            <input wire:model="cycleStart" type="date" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
                             <label class="text-sm">Akhir periode</label>
-                            <input wire:model.defer="cycleEnd" type="date" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                            <input wire:model="cycleEnd" type="date" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
                             <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Buat Siklus</button>
                         </form>
                     </div>
-                    <details class="mt-4 border dark:border-gray-700 rounded-lg p-3">
+                    <details wire:ignore.self class="mt-4 border dark:border-gray-700 rounded-lg p-3">
                         <summary class="cursor-pointer text-sm font-medium">Role dan Jabatan Persetujuan Kustom</summary>
                         <p class="text-xs text-gray-500 mt-2">Role organisasi digunakan untuk penugasan dan approval. Role baru tidak otomatis mendapatkan akses admin atau keuangan. Peran sistem yang sudah ada tetap dipertahankan.</p>
                         <form wire:submit.prevent="addWorkflowRole" class="flex flex-wrap gap-3 mt-3">
                             <div><label class="block text-xs mb-1">Kode role</label>
-                                <input wire:model.defer="newWorkflowRoleCode" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="spv_keuangan" /></div>
+                                <input wire:model="newWorkflowRoleCode" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="spv_keuangan" /></div>
                             <div><label class="block text-xs mb-1">Nama jabatan</label>
-                                <input wire:model.defer="newWorkflowRoleLabel" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Supervisor Keuangan" /></div>
+                                <input wire:model="newWorkflowRoleLabel" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Supervisor Keuangan" /></div>
                             <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Tambah Role</button>
                         </form>
                         <div class="flex flex-wrap gap-2 mt-3 text-xs">
@@ -147,18 +147,18 @@
             @endif
 
             @if($canPreviewLegacy)
-                <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                     <summary class="font-semibold cursor-pointer">Audit Referensi RKA Existing (Baca Saja)</summary>
                     <p class="text-xs text-gray-500 mt-2">Data lama tidak memiliki pemetaan organisasi dan tahun yang terverifikasi. Pratinjau ini tidak mengimpor atau menghitung ulang RKA.</p>
                     <form wire:submit.prevent="previewLegacy" class="flex gap-3 flex-wrap items-end mt-4">
                         <div><label class="block text-xs mb-1">Jenis sumber</label>
-                            <select wire:model.defer="legacySource" class="border rounded-lg p-2 dark:bg-gray-900">
+                            <select wire:model="legacySource" class="border rounded-lg p-2 dark:bg-gray-900">
                                 @foreach(\App\Services\RkaPlatform\LegacyBudgetPreviewService::SOURCES as $key => $table)
                                     <option value="{{ $key }}">{{ $key }} ({{ $table }})</option>
                                 @endforeach
                             </select></div>
                         <div><label class="block text-xs mb-1">Unit RKA existing</label>
-                            <select wire:model.defer="legacyUnitId" class="border rounded-lg p-2 dark:bg-gray-900">
+                            <select wire:model="legacyUnitId" class="border rounded-lg p-2 dark:bg-gray-900">
                                 <option value="">Pilih unit lama</option>
                                 @foreach($legacyUnits as $unit)
                                     <option value="{{ $unit->id }}">{{ $unit->nama }}</option>
@@ -188,7 +188,7 @@
 
             @if($cycleId)
                 @if($isManager)
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Bank Pertanyaan dan Penugasan</summary>
                         <div class="mt-4 flex flex-wrap items-center gap-3 rounded-lg border dark:border-gray-600 p-3">
                             <div class="flex-1">
@@ -200,56 +200,56 @@
                         <div class="grid lg:grid-cols-2 gap-5 mt-4">
                             <form wire:submit.prevent="createQuestion" class="space-y-2">
                                 <h3 class="font-medium">Buat Pertanyaan</h3>
-                                <input wire:model.defer="questionCode" placeholder="Kode pertanyaan" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                                <textarea wire:model.defer="questionText" rows="3" placeholder="Pertanyaan" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
-                                <input wire:model.defer="questionDomain" placeholder="Domain substansi" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                <input wire:model="questionCode" placeholder="Kode pertanyaan" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                <textarea wire:model="questionText" rows="3" placeholder="Pertanyaan" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
+                                <input wire:model="questionDomain" placeholder="Domain substansi" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
                                 <label class="block text-xs">Penanggung jawab substansi</label>
-                                <select wire:model.defer="questionOwnerRole" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                <select wire:model="questionOwnerRole" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="owner">Pemilik Organisasi</option>
                                     @foreach($assignableRoles as $code => $label)
                                         <option value="{{ $code }}">{{ $label }}</option>
                                     @endforeach
                                 </select>
-                                <label class="flex items-center gap-2 text-sm"><input type="checkbox" wire:model.defer="questionEvidenceRequired" /> Jawaban wajib disertai bukti yang diverifikasi</label>
-                                <details class="border dark:border-gray-600 rounded-lg p-3">
+                                <label class="flex items-center gap-2 text-sm"><input type="checkbox" wire:model="questionEvidenceRequired" /> Jawaban wajib disertai bukti yang diverifikasi</label>
+                                <details wire:ignore.self class="border dark:border-gray-600 rounded-lg p-3">
                                     <summary class="cursor-pointer text-xs">Aturan lanjutan (opsional)</summary>
-                                    <label class="flex gap-2 mt-3 text-sm"><input type="checkbox" wire:model="questionAdvanced" /> Aktifkan aturan berbasis JSON</label>
+                                    <label class="flex gap-2 mt-3 text-sm"><input type="checkbox" wire:model.live="questionAdvanced" /> Aktifkan aturan berbasis JSON</label>
                                     @if($questionAdvanced)
                                         <label class="block text-xs mt-3">Aturan relevansi pertanyaan</label>
-                                        <textarea wire:model.defer="questionRulesJson" rows="3" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
+                                        <textarea wire:model="questionRulesJson" rows="3" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
                                         <label class="block text-xs mt-3">Kebijakan bukti</label>
-                                        <textarea wire:model.defer="questionEvidenceJson" rows="3" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
+                                        <textarea wire:model="questionEvidenceJson" rows="3" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
                                     @endif
                                 </details>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Simpan Pertanyaan</button>
                             </form>
                             <form wire:submit.prevent="createInstance" class="space-y-2">
                                 <h3 class="font-medium">Tugaskan Pertanyaan</h3>
-                                <select wire:model.defer="newQuestionId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                <select wire:model="newQuestionId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="">Pilih pertanyaan</option>
                                     @foreach($questions as $question)
                                         <option value="{{ $question->id }}">{{ $question->code }} — {{ \Illuminate\Support\Str::limit($question->prompt, 65) }}</option>
                                     @endforeach
                                 </select>
-                                <select wire:model.defer="newOwnerUserId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                <select wire:model="newOwnerUserId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="">Pilih penanggung jawab</option>
                                     @foreach($users as $user)
                                         <option value="{{ $user->id }}">{{ $user->name }}</option>
                                     @endforeach
                                 </select>
                                 <label class="text-xs">Unit pemilik (opsional)</label>
-                                <select wire:model.defer="newUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                <select wire:model="newUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="">Tidak terikat unit</option>
                                     @foreach($units as $unit)<option value="{{ $unit->id }}">{{ $unit->name }}</option>@endforeach
                                 </select>
                                 <label class="text-xs">Reviewer independen</label>
-                                <select wire:model.defer="newReviewerUserId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                <select wire:model="newReviewerUserId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="">Pilih reviewer</option>
                                     @foreach($users as $user)<option value="{{ $user->id }}">{{ $user->name }}</option>@endforeach
                                 </select>
-                                <details class="border dark:border-gray-600 rounded-lg p-3">
+                                <details wire:ignore.self class="border dark:border-gray-600 rounded-lg p-3">
                                     <summary class="cursor-pointer text-xs">Konteks aturan lanjutan (opsional)</summary>
-                                    <textarea wire:model.defer="questionContextJson" rows="3" class="w-full border rounded-lg p-2 mt-3 font-mono text-xs dark:bg-gray-900"></textarea>
+                                    <textarea wire:model="questionContextJson" rows="3" class="w-full border rounded-lg p-2 mt-3 font-mono text-xs dark:bg-gray-900"></textarea>
                                 </details>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Buat Penugasan</button>
                             </form>
@@ -279,7 +279,7 @@
                             @if($canAnswer)
                             <form wire:submit.prevent="submitAnswer" class="space-y-2 mt-4">
                                 <label class="text-sm font-medium">Jawaban saya (revisi {{ $answerRevision }})</label>
-                                <textarea wire:model.defer="answerText" rows="4" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Berikan jawaban berdasarkan fakta dan sumber."></textarea>
+                                <textarea wire:model="answerText" rows="4" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Berikan jawaban berdasarkan fakta dan sumber."></textarea>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Kirim Jawaban</button>
                             </form>
                             @if($answerRevision > 0)
@@ -295,7 +295,7 @@
                                 @forelse($answers as $answer)
                                     <label class="block border dark:border-gray-600 rounded-lg p-3 text-sm">
                                         @if($isManager || $isInstanceOwner)
-                                            <input type="checkbox" value="{{ $answer->id }}" wire:model="synthesisAnswerIds" class="mr-2" />
+                                            <input type="checkbox" value="{{ $answer->id }}" wire:model.live="synthesisAnswerIds" class="mr-2" />
                                         @endif
                                         <span class="text-xs text-gray-500">Pengguna #{{ $answer->author_id }} · Rev {{ $answer->revision }}</span>
                                         <p class="mt-2 whitespace-pre-wrap">{{ $answer->content }}</p>
@@ -307,7 +307,7 @@
                             @if($isManager || $isInstanceOwner)
                             <form wire:submit.prevent="synthesize" class="mt-4 space-y-2">
                                 <label class="text-sm font-medium">Draf sintesis dari jawaban terbaru (wajib diperiksa dan dapat diedit)</label>
-                                <textarea wire:model.defer="synthesisText" rows="4" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
+                                <textarea wire:model="synthesisText" rows="4" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Sintesis</button>
                             </form>
                             @endif
@@ -344,17 +344,17 @@
                 </div>
 
                 @if($instanceId)
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Undangan Kontributor</summary>
                         @if($isManager || $isInstanceOwner)
                             <form wire:submit.prevent="invite" class="flex flex-wrap gap-3 items-end mt-4">
                                 <div><label class="block text-sm mb-1">Pengguna</label>
-                                    <select wire:model.defer="inviteUserId" class="border rounded-lg p-2 dark:bg-gray-900">
+                                    <select wire:model="inviteUserId" class="border rounded-lg p-2 dark:bg-gray-900">
                                         <option value="">Pilih anggota</option>
                                         @foreach($users as $user)<option value="{{ $user->id }}">{{ $user->name }}</option>@endforeach
                                     </select></div>
                                 <div><label class="block text-sm mb-1">Masa berlaku (hari)</label>
-                                    <input type="number" min="1" max="30" wire:model.defer="inviteDays" class="w-24 border rounded-lg p-2 dark:bg-gray-900" /></div>
+                                    <input type="number" min="1" max="30" wire:model="inviteDays" class="w-24 border rounded-lg p-2 dark:bg-gray-900" /></div>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Undang</button>
                             </form>
                         @endif
@@ -375,22 +375,22 @@
                 @endif
 
                 @if($isFinance)
-                    <details id="rka-finance-workflow" open class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self id="rka-finance-workflow" open class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">KPI Budget — Pratinjau Sebelum Sharing Budget</summary>
                         <form wire:submit.prevent="saveKpiProfile" class="space-y-2 mt-3">
                             <label class="text-sm font-medium block">Kategori pendapatan dan biaya untuk siklus ini</label>
                             <p class="text-xs text-gray-500">Gunakan kode kategori yang berlaku di organisasi Anda, pisahkan dengan koma. Profil baru dapat disimpan sebelum anggaran disetujui.</p>
                             <div class="grid md:grid-cols-2 gap-3">
-                                <div><label class="block text-xs mb-1">Kategori pendapatan</label><input wire:model.defer="kpiIncomeCategories" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Contoh: TUITION, GRANT" /></div>
-                                <div><label class="block text-xs mb-1">Kategori biaya</label><input wire:model.defer="kpiExpenseCategories" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Contoh: SALARY, OPERATIONS" /></div>
-                                <div><label class="block text-xs mb-1">Pendapatan yang dikecualikan (opsional)</label><input wire:model.defer="kpiExcludedIncomeCategories" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Harus termasuk kategori pendapatan" /></div>
-                                <label class="flex items-center gap-2 text-sm"><input type="checkbox" wire:model.defer="kpiSharingAlreadyInExpense" /> Biaya bersama sudah tercakup dalam kategori biaya</label>
+                                <div><label class="block text-xs mb-1">Kategori pendapatan</label><input wire:model="kpiIncomeCategories" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Contoh: TUITION, GRANT" /></div>
+                                <div><label class="block text-xs mb-1">Kategori biaya</label><input wire:model="kpiExpenseCategories" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Contoh: SALARY, OPERATIONS" /></div>
+                                <div><label class="block text-xs mb-1">Pendapatan yang dikecualikan (opsional)</label><input wire:model="kpiExcludedIncomeCategories" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Harus termasuk kategori pendapatan" /></div>
+                                <label class="flex items-center gap-2 text-sm"><input type="checkbox" wire:model="kpiSharingAlreadyInExpense" /> Biaya bersama sudah tercakup dalam kategori biaya</label>
                             </div>
-                            <details class="border dark:border-gray-600 rounded-lg p-3">
+                            <details wire:ignore.self class="border dark:border-gray-600 rounded-lg p-3">
                                 <summary class="cursor-pointer text-xs">Pengaturan lanjutan (JSON, opsional)</summary>
-                                <label class="flex gap-2 items-center mt-3 text-sm"><input type="checkbox" wire:model="kpiAdvanced" /> Gunakan format JSON saat menyimpan</label>
+                                <label class="flex gap-2 items-center mt-3 text-sm"><input type="checkbox" wire:model.live="kpiAdvanced" /> Gunakan format JSON saat menyimpan</label>
                                 @if($kpiAdvanced)
-                                    <textarea wire:model.defer="kpiProfileJson" rows="4" class="w-full border rounded-lg p-2 mt-3 font-mono text-xs dark:bg-gray-900"></textarea>
+                                    <textarea wire:model="kpiProfileJson" rows="4" class="w-full border rounded-lg p-2 mt-3 font-mono text-xs dark:bg-gray-900"></textarea>
                                 @endif
                             </details>
                             <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Simpan Profil KPI</button>
@@ -414,15 +414,15 @@
                             </div>
                         @endif
                     </details>
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Anggaran dan Sharing Budget</summary>
                         <div class="grid lg:grid-cols-2 gap-5 mt-4">
                             <form wire:submit.prevent="addBudget" class="space-y-2">
                                 <h3 class="font-medium">Baris Anggaran</h3>
-                                <input wire:model.defer="lineName" placeholder="Nama anggaran" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                                <input wire:model.defer="lineCategory" placeholder="Kategori anggaran" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                                <input wire:model.defer="lineAmount" type="number" min="0" step="0.01" placeholder="Nominal" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                                <select wire:model.defer="lineUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                <input wire:model="lineName" placeholder="Nama anggaran" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                <input wire:model="lineCategory" placeholder="Kategori anggaran" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                <input wire:model="lineAmount" type="number" min="0" step="0.01" placeholder="Nominal" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                <select wire:model="lineUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="">Tanpa unit</option>
                                     @foreach($units as $unit)<option value="{{ $unit->id }}">{{ $unit->name }}</option>@endforeach
                                 </select>
@@ -430,10 +430,10 @@
                             </form>
                             <form wire:submit.prevent="createPool" class="space-y-2">
                                 <h3 class="font-medium">Cost Pool dan Alokasi</h3>
-                                <input wire:model.defer="poolCode" placeholder="Kode cost pool" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                                <input wire:model.defer="poolName" placeholder="Nama kelompok biaya" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                                <input wire:model.defer="poolAmount" type="number" min="0" step="0.01" placeholder="Nominal" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                                <select wire:model.defer="poolMethod" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                <input wire:model="poolCode" placeholder="Kode cost pool" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                <input wire:model="poolName" placeholder="Nama kelompok biaya" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                <input wire:model="poolAmount" type="number" min="0" step="0.01" placeholder="Nominal" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                <select wire:model="poolMethod" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="equal">Bobot sama</option>
                                     <option value="weighted">Bobot sesuai nilai yang diisi</option>
                                 </select>
@@ -441,7 +441,7 @@
                                 @foreach($units as $unit)
                                     <div class="flex gap-2 items-center text-sm">
                                         <label class="flex-1">{{ $unit->name }}</label>
-                                        <input wire:model.defer="poolDrivers.{{ $unit->id }}" type="number" min="0" step="0.001"
+                                        <input wire:model="poolDrivers.{{ $unit->id }}" type="number" min="0" step="0.001"
                                             placeholder="Bobot" class="w-24 border rounded-lg p-2 dark:bg-gray-900" />
                                     </div>
                                 @endforeach
@@ -475,13 +475,13 @@
                         </div>
                         <p class="mt-3 text-xs text-gray-500">Alokasi ini adalah rencana manajerial, bukan posting jurnal ke sistem keuangan.</p>
                     </details>
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Impor Jurnal XLSX (Staging)</summary>
                         <form wire:submit.prevent="importJournal" class="space-y-3 mt-4">
                             <p class="text-sm text-gray-500">File harus berisi header: line_id, journal_no, date, account_code, debit, credit; kolom opsional: unit_code, posting_status, entry_kind, related_reference. Format header dapat dipetakan melalui JSON. Data masuk staging, belum menjadi laporan realisasi final.</p>
-                            <input wire:model.defer="journalSource" placeholder="Identitas sistem sumber" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                            <input wire:model="journalSource" placeholder="Identitas sistem sumber" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
                             <label class="block text-xs">Mapping field ke nama header XLSX</label>
-                            <textarea wire:model.defer="journalMappingJson" rows="2" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
+                            <textarea wire:model="journalMappingJson" rows="2" class="w-full border rounded-lg p-2 font-mono text-xs dark:bg-gray-900"></textarea>
                             <input wire:model="journalFile" type="file" accept=".xlsx" class="block w-full" />
                             <button class="px-4 py-2 bg-primary-600 text-white rounded-lg" wire:loading.attr="disabled" wire:target="journalFile,importJournal">Impor ke Staging</button>
                         </form>
@@ -499,24 +499,24 @@
                 @endif
 
                 @if($isFinance)
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Pemetaan Akun dan Klasifikasi Jurnal</summary>
                         <p class="text-xs text-gray-500 mt-2">Setiap kode akun berasal dari sumber jurnal organisasi sendiri. Mapping bersifat efektif untuk satu siklus; pembuat dan pengesah harus berbeda. Jurnal asli tidak dimodifikasi.</p>
                         <form wire:submit.prevent="draftJournalMapping" class="grid md:grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-                            <div><label class="block text-xs mb-1">Kode sumber</label><input wire:model.defer="mappingSource" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Contoh: ledger_1" /></div>
-                            <div><label class="block text-xs mb-1">Kode akun</label><input wire:model.defer="mappingAccount" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                            <div><label class="block text-xs mb-1">Kode sumber</label><input wire:model="mappingSource" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Contoh: ledger_1" /></div>
+                            <div><label class="block text-xs mb-1">Kode akun</label><input wire:model="mappingAccount" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
                             <div><label class="block text-xs mb-1">Perlakuan</label>
-                                <select wire:model.defer="mappingClass" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                <select wire:model="mappingClass" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                     @foreach(['income'=>'Pendapatan eksternal','expense'=>'Beban','internal_income'=>'Pemulihan/internal income','internal_expense'=>'Beban internal','clearing'=>'Akun antara/clearing','non_pnl'=>'Neraca / bukan laba rugi'] as $key => $label)
                                         <option value="{{ $key }}">{{ $label }}</option>
                                     @endforeach
                                 </select>
                             </div>
                             <div><label class="block text-xs mb-1">Kategori pendapatan akuntansi (opsional, untuk KPI dengan/tanpa kategori khusus)</label>
-                                <input wire:model.defer="mappingCategory" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Kode kategori organisasi" />
+                                <input wire:model="mappingCategory" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Kode kategori organisasi" />
                             </div>
                             <div><label class="block text-xs mb-1">Unit default (opsional)</label>
-                                <select wire:model.defer="mappingUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                <select wire:model="mappingUnitId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="">Unit dari baris jurnal</option>
                                     @foreach($units as $unit)<option value="{{ $unit->id }}">{{ $unit->name }}</option>@endforeach
                                 </select>
@@ -546,7 +546,7 @@
                             </table>
                         </div>
                     </details>
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Rekonsiliasi, Eliminasi Internal dan KPI Budget</summary>
                         <p class="text-xs text-gray-500 mt-2">Draf rekonsiliasi dibuat otomatis setelah perubahan data keuangan. Verifikasi wajib oleh pemeriksa independen. Laporan sementara memperlihatkan blocker tanpa menyembunyikannya. Jurnal tidak seimbang, akun belum terpetakan, clearing terbuka, dan pasangan pendapatan/beban internal yang tidak cocok menghentikan pengesahan.</p>
                         <div class="mt-4">
@@ -571,7 +571,7 @@
                                         <span>Surplus: {{ $run->report_data['consolidated']['surplus'] ?? '-' }}</span>
                                     </div>
                                     @if(!empty($run->report_data['blockers']))
-                                        <details class="mt-3"><summary class="cursor-pointer text-sm text-red-700">Lihat masalah rekonsiliasi</summary>
+                                        <details wire:ignore.self class="mt-3"><summary class="cursor-pointer text-sm text-red-700">Lihat masalah rekonsiliasi</summary>
                                             <div class="max-h-48 overflow-y-auto mt-2 space-y-1 text-xs">
                                                 @foreach($run->report_data['blockers'] as $blocker)
                                                     <p>{{ $blocker['code'] }} — {{ $blocker['reference'] ?? '' }}</p>
@@ -579,7 +579,7 @@
                                             </div>
                                         </details>
                                     @endif
-                                    <details class="mt-3"><summary class="cursor-pointer text-sm">KPI per unit (manajerial)</summary>
+                                    <details wire:ignore.self class="mt-3"><summary class="cursor-pointer text-sm">KPI per unit (manajerial)</summary>
                                         <div class="overflow-x-auto mt-2"><table class="w-full text-xs">
                                             <thead><tr class="text-left"><th class="p-2">Unit</th><th class="p-2">Pendapatan anggaran</th><th class="p-2">Beban anggaran</th><th class="p-2">Sharing rencana</th><th class="p-2">Surplus rencana</th><th class="p-2">Surplus aktual</th></tr></thead>
                                             <tbody>
@@ -601,15 +601,15 @@
                 @endif
 
                 @if($isFinance)
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Kebijakan Materialitas dan Pengecualian Terkendali</summary>
                         <p class="text-xs text-gray-500 mt-2">Pengecualian hanya boleh untuk kategori anggaran yang belum dipetakan, bukan untuk jurnal tidak seimbang, transaksi ganda, clearing terbuka, atau eliminasi internal yang bermasalah. Jumlah pengecualian dihitung bruto dan dibatasi oleh batas nominal serta persentase secara bersamaan.</p>
                         @if($isManager)
                             <form wire:submit.prevent="proposeMaterialityPolicy" class="grid md:grid-cols-3 gap-3 mt-4">
                                 <div><label class="block text-xs mb-1">Batas absolut (mata uang organisasi)</label>
-                                    <input wire:model.defer="materialityAmount" type="number" min="0.01" step="0.01" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                                    <input wire:model="materialityAmount" type="number" min="0.01" step="0.01" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
                                 <div><label class="block text-xs mb-1">Batas relatif (basis poin, 100 = 1%)</label>
-                                    <input wire:model.defer="materialityBasisPoints" type="number" min="1" max="10000" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
+                                    <input wire:model="materialityBasisPoints" type="number" min="1" max="10000" class="w-full border rounded-lg p-2 dark:bg-gray-900" /></div>
                                 <div class="flex items-end"><button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Kebijakan</button></div>
                             </form>
                         @endif
@@ -626,13 +626,13 @@
                         @if($unmappedBudgetLines->count() && $cycleCurrent?->status === 'draft')
                             <form wire:submit.prevent="requestMaterialityException" class="grid md:grid-cols-3 gap-3 mt-4">
                                 <div class="md:col-span-2"><label class="block text-xs mb-1">Baris anggaran yang belum masuk profil KPI</label>
-                                    <select wire:model.defer="exceptionBudgetId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                    <select wire:model="exceptionBudgetId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                         <option value="">Pilih anggaran</option>
                                         @foreach($unmappedBudgetLines as $line)
                                             <option value="{{ $line->id }}">#{{ $line->id }} · {{ $line->category }} · {{ $line->name }} · {{ $line->amount }}</option>
                                         @endforeach
                                     </select></div>
-                                <textarea wire:model.defer="exceptionReason" rows="2" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Alasan dan bukti pertimbangan minimal 10 karakter"></textarea>
+                                <textarea wire:model="exceptionReason" rows="2" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Alasan dan bukti pertimbangan minimal 10 karakter"></textarea>
                                 <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Pengecualian</button>
                             </form>
                         @endif
@@ -650,19 +650,19 @@
                 @endif
 
                 @if($isFinance && $cycleCurrent && ($cycleCurrent->settings['sharing_unit_approval_policy'] ?? '') === 'impact_based')
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Penilaian Dampak Sharing Budget</summary>
                         <p class="mt-2 text-xs text-gray-500">Jenis perubahan menentukan respons unit: rutin = informasi/review/persetujuan; perubahan parameter = review/persetujuan; baseline atau perpindahan tanggung jawab = persetujuan formal. Dua pengguna berbeda diperlukan untuk menetapkan penilaian. Alokasi tidak dapat disahkan bila penilaian versinya belum sah.</p>
                         @if($cycleCurrent->status === 'draft')
                             <form wire:submit.prevent="proposeSharingImpact" class="grid md:grid-cols-3 gap-3 mt-4">
                                 <div><label class="block text-xs">Alokasi</label>
-                                    <select wire:model.defer="impactPoolId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                    <select wire:model="impactPoolId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                         <option value="">Pilih pool draft</option>
                                         @foreach($pools->where('status','draft') as $pool)<option value="{{ $pool->id }}">{{ $pool->name }} · v{{ $pool->version }}</option>@endforeach
                                     </select>
                                 </div>
                                 <div><label class="block text-xs">Jenis perubahan</label>
-                                    <select wire:model.defer="impactChangeType" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                    <select wire:model="impactChangeType" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                         <option value="baseline">Alokasi awal/baseline</option>
                                         <option value="routine">Rutin sesuai kebijakan</option>
                                         <option value="parameters">Perubahan parameter</option>
@@ -670,17 +670,17 @@
                                     </select>
                                 </div>
                                 <div><label class="block text-xs">Respons unit</label>
-                                    <select wire:model.defer="impactTier" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                    <select wire:model="impactTier" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                         <option value="inform">Informasi</option>
                                         <option value="review">Review/konfirmasi</option>
                                         <option value="approve">Persetujuan formal</option>
                                     </select>
                                 </div>
                                 <div><label class="block text-xs">Batas review (khusus tier review)</label>
-                                    <input wire:model.defer="impactDueAt" type="datetime-local" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                    <input wire:model="impactDueAt" type="datetime-local" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
                                 </div>
                                 <div class="md:col-span-2"><label class="block text-xs">Alasan klasifikasi dampak dan dasar kebijakan</label>
-                                    <textarea wire:model.defer="impactReason" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Sebutkan dasar perubahan, besaran dampak, dan mengapa tingkat respons sesuai"></textarea>
+                                    <textarea wire:model="impactReason" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Sebutkan dasar perubahan, besaran dampak, dan mengapa tingkat respons sesuai"></textarea>
                                 </div>
                                 <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Penilaian Dampak</button>
                             </form>
@@ -700,20 +700,20 @@
                         @endforelse
                     </details>
                     @if($isManager)
-                        <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                        <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                             <summary class="font-semibold cursor-pointer">Eskalasi Review Unit yang Melewati Tenggat</summary>
                             <p class="mt-2 text-xs text-gray-500">Hanya berlaku untuk tier review yang telah melewati tenggat. Tidak ada persetujuan otomatis. Dua pejabat berbeda wajib menyetujui, dan sengketa terbuka tetap memblokir.</p>
                             @if($cycleCurrent->status === 'draft')
                                 <form wire:submit.prevent="proposeSharingReviewEscalation" class="grid md:grid-cols-3 gap-3 mt-4">
-                                    <select wire:model.defer="reviewEscalationPoolId" class="border rounded-lg p-2 dark:bg-gray-900">
+                                    <select wire:model="reviewEscalationPoolId" class="border rounded-lg p-2 dark:bg-gray-900">
                                         <option value="">Pilih alokasi</option>
                                         @foreach($pools->where('status','draft') as $pool)<option value="{{ $pool->id }}">{{ $pool->name }}</option>@endforeach
                                     </select>
-                                    <select wire:model.defer="reviewEscalationUnitId" class="border rounded-lg p-2 dark:bg-gray-900">
+                                    <select wire:model="reviewEscalationUnitId" class="border rounded-lg p-2 dark:bg-gray-900">
                                         <option value="">Pilih unit belum merespons</option>
                                         @foreach($units as $unit)<option value="{{ $unit->id }}">{{ $unit->name }}</option>@endforeach
                                     </select>
-                                    <textarea wire:model.defer="reviewEscalationReason" rows="2" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Bukti upaya review dan alasan eskalasi"></textarea>
+                                    <textarea wire:model="reviewEscalationReason" rows="2" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Bukti upaya review dan alasan eskalasi"></textarea>
                                     <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Eskalasi</button>
                                 </form>
                             @endif
@@ -730,7 +730,7 @@
                 @endif
 
                 @if($requiresUnitConsent && $unitConsentPools->count())
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Persetujuan Sharing Budget untuk Unit Saya</summary>
                         <p class="text-xs text-gray-500 mt-2">Penanggung jawab unit menyetujui hanya biaya yang dibebankan ke unitnya. Persetujuan berlaku untuk satu versi hasil alokasi; perubahan bobot, nominal atau penerima mengharuskan persetujuan ulang. Jika tidak sesuai, ajukan sengketa.</p>
                         <div class="mt-3 space-y-2">
@@ -754,26 +754,26 @@
                 @endif
 
                 @if($canRaiseDispute)
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Sengketa Alokasi Sharing Budget</summary>
                         <p class="text-xs text-gray-500 mt-2">Sengketa terbuka menghentikan closing sampai ada resolusi tercatat. Penanggung jawab unit hanya dapat mengajukan atas unitnya sendiri.</p>
                         @if($cycleCurrent && $cycleCurrent->status === 'draft')
                             <form wire:submit.prevent="raiseSharingDispute" class="grid md:grid-cols-3 gap-3 mt-4">
-                                <select wire:model.defer="disputePoolId" class="border rounded-lg p-2 dark:bg-gray-900">
+                                <select wire:model="disputePoolId" class="border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="">Pilih cost pool</option>
                                     @foreach($disputePools as $pool)<option value="{{ $pool->id }}">{{ $pool->name }}</option>@endforeach
                                 </select>
-                                <select wire:model.defer="disputeUnitId" class="border rounded-lg p-2 dark:bg-gray-900">
+                                <select wire:model="disputeUnitId" class="border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="">Unit terdampak</option>
                                     @foreach($units as $unit)<option value="{{ $unit->id }}">{{ $unit->name }}</option>@endforeach
                                 </select>
-                                <textarea wire:model.defer="disputeReason" rows="2" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Dasar keberatan dan rujukan bukti"></textarea>
+                                <textarea wire:model="disputeReason" rows="2" class="border rounded-lg p-2 dark:bg-gray-900" placeholder="Dasar keberatan dan rujukan bukti"></textarea>
                                 <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Sengketa</button>
                             </form>
                         @endif
                         @if($isFinance)
                             <div class="mt-3"><label class="block text-xs">Resolusi (wajib dicatat sebelum menyelesaikan sengketa)</label>
-                                <textarea wire:model.defer="disputeResolution" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea></div>
+                                <textarea wire:model="disputeResolution" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea></div>
                         @endif
                         @foreach($sharingDisputes as $dispute)
                             <div class="border-b dark:border-gray-700 py-3 text-sm">
@@ -789,13 +789,13 @@
                 @endif
 
                 @if($isManager)
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Kebijakan Approval Closing / Reopening</summary>
                         <p class="text-xs text-gray-500 mt-2">Konfigurasikan 2–5 tingkat persetujuan berdasarkan role organisasi. Pembuat dan pengaktif kebijakan harus berbeda; tahap approval selalu menggunakan versi policy yang dibekukan saat pengajuan.</p>
                         @if($cycleCurrent && $cycleCurrent->status === 'draft')
                             <form wire:submit.prevent="updateCycleCloseRisk" class="flex flex-wrap gap-3 items-end mt-4">
                                 <div><label class="block text-xs mb-1">Risiko closing pada siklus aktif</label>
-                                    <select wire:model.defer="cycleCloseRisk" class="border rounded-lg p-2 dark:bg-gray-900">
+                                    <select wire:model="cycleCloseRisk" class="border rounded-lg p-2 dark:bg-gray-900">
                                         <option value="normal">Normal</option><option value="high">Tinggi</option>
                                     </select>
                                 </div>
@@ -804,14 +804,14 @@
                             </form>
                         @endif
                         <form wire:submit.prevent="proposeClosingPolicy" class="grid md:grid-cols-3 gap-3 mt-4">
-                            <select wire:model.defer="policyAction" class="border rounded-lg p-2 dark:bg-gray-900">
+                            <select wire:model="policyAction" class="border rounded-lg p-2 dark:bg-gray-900">
                                 <option value="cycle.close">Closing</option><option value="cycle.reopen">Pembukaan kembali</option>
                             </select>
-                            <select wire:model.defer="policyRisk" class="border rounded-lg p-2 dark:bg-gray-900">
+                            <select wire:model="policyRisk" class="border rounded-lg p-2 dark:bg-gray-900">
                                 <option value="normal">Normal</option><option value="high">Risiko tinggi</option>
                             </select>
                             <div class="md:col-span-3"><label class="block text-xs mb-1">Tahapan JSON (role dan label)</label>
-                                <textarea wire:model.defer="policyStepsJson" rows="3" class="w-full font-mono text-xs border rounded-lg p-2 dark:bg-gray-900" placeholder='[{"label":"Verifikasi","roles":["finance"]},{"label":"Pengesahan","roles":["owner"]}]'></textarea>
+                                <textarea wire:model="policyStepsJson" rows="3" class="w-full font-mono text-xs border rounded-lg p-2 dark:bg-gray-900" placeholder='[{"label":"Verifikasi","roles":["finance"]},{"label":"Pengesahan","roles":["owner"]}]'></textarea>
                             </div>
                             <button type="submit" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Buat Draft Kebijakan</button>
                         </form>
@@ -827,11 +827,11 @@
                 @endif
 
                 @if($canControlClose)
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Closing, Pembukaan Kembali dan Persetujuan</summary>
                         <p class="text-xs text-gray-500 mt-2">Status siklus: <strong>{{ $cycleCurrent?->status }}</strong>. Closing mewajibkan rekonsiliasi terakhir disahkan tanpa blocker, serta kebijakan approval yang aktif. Snapshot lama tidak boleh ditimpa.</p>
                         <div class="mt-4 space-y-3">
-                            <textarea wire:model.defer="cycleApprovalReason" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Alasan dan dasar pengajuan minimal 10 karakter"></textarea>
+                            <textarea wire:model="cycleApprovalReason" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Alasan dan dasar pengajuan minimal 10 karakter"></textarea>
                             @if($cycleCurrent?->status === 'draft' && $isFinance)
                                 <button type="button" wire:click="submitCycleApproval('cycle.close')" class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Closing Siklus</button>
                             @elseif($cycleCurrent?->status === 'closed' && $isManager)
@@ -840,7 +840,7 @@
                         </div>
                         <div class="mt-5">
                             <label class="block text-xs mb-1">Alasan penolakan persetujuan (bila diperlukan)</label>
-                            <textarea wire:model.defer="approvalDecisionReason" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
+                            <textarea wire:model="approvalDecisionReason" rows="2" class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
                         </div>
                         <div class="space-y-3 mt-4">
                             @foreach($cycleApprovals as $approval)
@@ -869,24 +869,24 @@
                 @endif
 
                 @if($isManager)
-                    <details class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
+                    <details wire:ignore.self class="rounded-xl bg-white dark:bg-gray-800 shadow p-5">
                         <summary class="font-semibold cursor-pointer">Template Buku RKA Dinamis</summary>
                         <div class="grid lg:grid-cols-2 gap-5 mt-4">
                             <form wire:submit.prevent="createTemplate" class="space-y-2">
                                 <h3 class="font-medium">Template Baru</h3>
-                                <input wire:model.defer="templateName" placeholder="Nama template" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
-                                <textarea wire:model.defer="templateSections" rows="5" placeholder="Satu judul bab/subbab per baris. Tidak ada bab bawaan." class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
+                                <input wire:model="templateName" placeholder="Nama template" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                <textarea wire:model="templateSections" rows="5" placeholder="Satu judul bab/subbab per baris. Tidak ada bab bawaan." class="w-full border rounded-lg p-2 dark:bg-gray-900"></textarea>
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Simpan Template</button>
                             </form>
                             <form wire:submit.prevent="createBook" class="space-y-2">
                                 <h3 class="font-medium">Buku RKA dari Template</h3>
-                                <select wire:model.defer="newTemplateId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
+                                <select wire:model="newTemplateId" class="w-full border rounded-lg p-2 dark:bg-gray-900">
                                     <option value="">Pilih template</option>
                                     @foreach($templates as $template)
                                         <option value="{{ $template->id }}">{{ $template->name }} (v{{ $template->version }})</option>
                                     @endforeach
                                 </select>
-                                <input wire:model.defer="bookTitle" placeholder="Judul buku" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
+                                <input wire:model="bookTitle" placeholder="Judul buku" class="w-full border rounded-lg p-2 dark:bg-gray-900" />
                                 <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Buat Buku</button>
                             </form>
                         </div>
@@ -922,7 +922,7 @@
                                     @if($canEditBook)
                                     <form wire:submit.prevent="saveSection" class="mt-4 space-y-2">
                                         <label class="font-medium text-sm">Isi bagian terpilih</label>
-                                        <textarea wire:model.defer="sectionContent" rows="7" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Narasi bagian buku"></textarea>
+                                        <textarea wire:model="sectionContent" rows="7" class="w-full border rounded-lg p-2 dark:bg-gray-900" placeholder="Narasi bagian buku"></textarea>
                                         <button class="px-4 py-2 bg-primary-600 text-white rounded-lg">Ajukan Review Bagian</button>
                                     </form>
                                     @else
@@ -960,4 +960,4 @@
             </div>
         @endif
     </div>
-</x-filament::page>
+</x-filament-panels::page>

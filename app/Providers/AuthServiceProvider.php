@@ -28,6 +28,7 @@ class AuthServiceProvider extends ServiceProvider
     protected $policies = [
         Permission::class => PermissionPolicy::class,
         Role::class => RolePolicy::class,
+        \App\Models\Role::class => RolePolicy::class,
         User::class => UserPolicy::class,
         Unit::class => UnitPolicy::class,
         Akun::class => AkunPolicy::class,
@@ -39,6 +40,8 @@ class AuthServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        \Illuminate\Support\Facades\Gate::before(function (User $user) {
+            return $user->hasRole('superadmin') ? true : null;
+        });
     }
 }

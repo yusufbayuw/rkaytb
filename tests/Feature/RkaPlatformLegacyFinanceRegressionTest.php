@@ -86,7 +86,7 @@ class RkaPlatformLegacyFinanceRegressionTest extends TestCase
         Membership::create(['organization_id' => $org->id, 'user_id' => $user->id,
             'roles' => ['contributor'], 'active' => true]);
         $this->actingAs($user);
-        $this->assertTrue($user->canAccessFilament());
+        $this->assertTrue($user->canAccessPanel(\Filament\Facades\Filament::getPanel('admin')));
 
         foreach ([
             RkaResource::class, RkaMaintenanceResource::class, RkaConsumableResource::class,

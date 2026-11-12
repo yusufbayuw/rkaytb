@@ -15,7 +15,7 @@ class KpiTarget extends Model
 
     public function positions()
     {
-        return $this->belongsToMany(Position::class);
+        return $this->belongsToMany(Position::class, 'position_kpi_target', 'kpi_target_id', 'position_id');
     }
 
     public function kpiScores()

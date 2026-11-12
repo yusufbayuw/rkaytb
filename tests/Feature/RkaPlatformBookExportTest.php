@@ -108,12 +108,56 @@ class RkaPlatformBookExportTest extends TestCase
             $this->assertStringContainsString('Alpha', $xml);
             $document = new DOMDocument();
             $this->assertTrue($document->loadXML($xml));
+            $xpath = new \DOMXPath($document);
+            $xpath->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+            foreach ($xpath->query('//w:tbl') as $table) {
+                $width = 0;
+                foreach ($xpath->query('w:tblGrid/w:gridCol', $table) as $column) {
+                    $width += (int) $column->getAttributeNS('http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'w');
+                }
+                $this->assertGreaterThan(0, $width);
+                $this->assertLessThanOrEqual(9638, $width);
+                $this->assertSame(1, $xpath->query('w:tr/w:trPr/w:tblHeader', $table)->length);
+            }
+            $styles = new DOMDocument();
+            $this->assertTrue($styles->loadXML($zip->getFromName('word/styles.xml')));
             if (extension_loaded('gd')) {
                 $this->assertNotFalse($zip->getFromName('word/media/kpi-chart.png'));
             }
             $zip->close();
         } finally {
             @unlink($path);
+        }
+    }
+
+    public function test_long_documents_export_from_one_unchanged_snapshot(): void
+    {
+        $book = $this->publishedBook();
+        $snapshot = $book->snapshot;
+        $snapshot['title'] = 'Buku RKA Pengujian Dokumen Panjang';
+        $template = $snapshot['financial_report']['unit_managerial'][0];
+        $snapshot['financial_report']['unit_managerial'] = [];
+        for ($i = 1; $i <= 48; $i++) {
+            $snapshot['financial_report']['unit_managerial'][] = [...$template,
+                'unit' => 'Unit Pengujian '.$i.' dengan uraian organisasi yang panjang'];
+        }
+        for ($i = 1; $i <= 8; $i++) {
+            $snapshot['sections'][] = ['code' => 'long-'.$i, 'title' => 'Evaluasi dan Rencana Kegiatan '.$i,
+                'block_type' => 'narrative', 'content' => str_repeat("Dokumen ini menggunakan data pengujian. Evaluasi kegiatan menjelaskan capaian, penggunaan anggaran, dan tindak lanjut yang ditinjau secara independen.\n", 16)];
+        }
+        $book->update(['snapshot' => $snapshot]);
+        // Compare the persisted JSON baseline: MySQL normalizes object key order.
+        $book->refresh();
+        $snapshot = $book->snapshot;
+        foreach (['pdf', 'docx', 'xlsx'] as $format) {
+            $bytes = $this->bytes($book, $format);
+            $this->assertGreaterThan(1000, strlen($bytes));
+            if (getenv('RKA_EXPORT_QA') === '1') {
+                $directory = base_path('.tools/export-qa');
+                if (!is_dir($directory)) mkdir($directory, 0775, true);
+                file_put_contents($directory.'/long-rka-book.'.$format, $bytes);
+            }
+            $this->assertSame($snapshot, $book->fresh()->snapshot);
         }
     }
 

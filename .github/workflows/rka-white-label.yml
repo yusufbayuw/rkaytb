@@ -1,75 +1,82 @@
-name: RKA White Label Checks
+name: RKA Upgrade Checks
 
 on:
-  # Run for every PR change, including legacy Resources, commands, all
-  # migrations, security controls, workflow scripts and dependency files.
   pull_request:
   push:
-    branches: [main, feature/white-label-rka-platform]
+    branches: [main, feature/white-label-rka-platform, 'codex/**']
+
+permissions:
+  contents: read
 
 jobs:
-  frontend-build:
-    name: Production Vite build
+  application:
+    name: PHP 8.4 / SQLite / build / browser
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, fileinfo, pdo_sqlite, sqlite3, zip, gd, intl, bcmath
+          coverage: none
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          extensions: mbstring, dom, fileinfo, pdo_sqlite, sqlite3, zip, gd, intl
-          coverage: none
-      - name: Install Filament CSS dependencies from composer.lock
-        run: composer install --no-interaction --prefer-dist --no-progress
-      - name: Install frontend dependencies from lockfile
-        run: npm ci
-      - name: Verify production assets
-        run: npm run build
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          extensions: mbstring, dom, fileinfo, pdo_sqlite, sqlite3, zip, gd, intl
-          coverage: none
-      - name: PHP syntax lint (independent of Composer)
-        run: |
-          find app database/migrations tests routes config scripts -type f -name '*.php' -print0 | xargs -0 -n1 php -l
-      - run: composer validate --no-check-publish
+      - run: composer validate --strict --no-check-publish
       - run: composer install --no-interaction --prefer-dist --no-progress
-      - name: Prepare app environment
+      - name: PHP syntax
+        run: find app database tests routes config scripts -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Prepare isolated environment
         run: |
           cp .env.example .env
           php artisan key:generate --force
-      - name: Test full suite including legacy smoke tests
+      - run: npm ci
+      - run: composer audit
+      - run: npm audit --audit-level=moderate
+      - run: npm run build
+      - name: Full SQLite regression suite
         env:
           APP_ENV: testing
           DB_CONNECTION: sqlite
           DB_DATABASE: ':memory:'
         run: php artisan test
-      - name: Check Filament Blade views
-        run: php artisan view:cache
-      - name: Check routes and read-only historical audit command registration
+      - name: Compile views, routes, and configuration
         run: |
-          php artisan route:list --path=rka-platform
+          php artisan view:cache
+          php artisan route:cache
+          php artisan config:cache
+          php artisan schedule:list
           php artisan list --raw | grep -F 'rka:audit-legacy'
-      - name: Non-destructive legacy-to-platform migration + rollback rehearsal (isolated SQLite)
+          php artisan optimize:clear
+      - name: Non-destructive migration rehearsal
         env:
           APP_ENV: testing
           DB_CONNECTION: sqlite
           DB_DATABASE: ${{ github.workspace }}/database/ci_upgrade_test.sqlite
         run: bash scripts/ci-verify-rka-upgrade.sh
+      - run: npx playwright install --with-deps chromium
+      - name: Desktop and mobile browser regression
+        run: npm run test:browser
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: browser-results
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+
   mysql:
-    name: MySQL 8 migration and regression
+    name: PHP 8.4 / MySQL ${{ matrix.mysql }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mysql: ['8.0', '8.4']
     services:
       mysql:
-        image: mysql:8.0
+        image: mysql:${{ matrix.mysql }}
         env:
           MYSQL_ROOT_PASSWORD: test-password
           MYSQL_DATABASE: rka_test
@@ -79,40 +86,30 @@ jobs:
           --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -ptest-password"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=10
+          --health-retries=20
+    env:
+      APP_ENV: testing
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: rka_test
+      DB_USERNAME: root
+      DB_PASSWORD: test-password
+      CACHE_DRIVER: array
+      SESSION_DRIVER: array
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.2'
-          extensions: mbstring, dom, fileinfo, pdo_mysql, zip, gd, intl
+          php-version: '8.4'
+          extensions: mbstring, dom, fileinfo, pdo_mysql, zip, gd, intl, bcmath
           coverage: none
       - run: composer install --no-interaction --prefer-dist --no-progress
-      - name: Prepare isolated test environment
+      - name: Prepare isolated environment
         run: |
           cp .env.example .env
           php artisan key:generate --force
-      - name: Test migrations and full regression suite
-        env:
-          APP_ENV: testing
-          DB_CONNECTION: mysql
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_DATABASE: rka_test
-          DB_USERNAME: root
-          DB_PASSWORD: test-password
-          CACHE_DRIVER: array
-          SESSION_DRIVER: array
+      - name: Full MySQL regression suite
         run: php artisan test
-      - name: Non-destructive legacy-to-platform migration + rollback rehearsal (isolated MySQL)
-        env:
-          APP_ENV: testing
-          DB_CONNECTION: mysql
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_DATABASE: rka_test
-          DB_USERNAME: root
-          DB_PASSWORD: test-password
-          CACHE_DRIVER: array
-          SESSION_DRIVER: array
+      - name: Non-destructive migration rehearsal
         run: bash scripts/ci-verify-rka-upgrade.sh

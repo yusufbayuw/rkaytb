@@ -74,10 +74,11 @@ if ($stage === 'expanded') {
         }
     }
     $count = DB::table('migrations')->where('migration', 'like', '2026_%')->count();
-    if ($count !== 9) {
-        throw new RuntimeException("Expected 9 additive migrations, got {$count}.");
+    $expected = count(glob(dirname(__DIR__).'/database/migrations/2026_*.php'));
+    if ($count !== $expected) {
+        throw new RuntimeException("Expected {$expected} additive migrations, got {$count}.");
     }
-    echo "Expanded schema: 9 additive migrations; legacy amounts unchanged.\n";
+    echo "Expanded schema: {$expected} additive migrations; legacy amounts unchanged.\n";
 } else {
     foreach ($newTables as $table) {
         if (Schema::hasTable($table)) {

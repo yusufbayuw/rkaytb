@@ -4,7 +4,7 @@ namespace App\Filament\Resources\RkaMaintenanceResource\Pages;
 
 use App\Models\User;
 use App\Models\Setting;
-use Filament\Pages\Actions;
+use Filament\Actions;
 use Filament\Resources\Pages\ManageRecords;
 use App\Filament\Resources\RkaMaintenanceResource;
 use App\Filament\Resources\RkaMaintenanceResource\Widgets\TotalMaintenanceOverview;
@@ -13,19 +13,21 @@ class ManageRkaMaintenances extends ManageRecords
 {
     protected static string $resource = RkaMaintenanceResource::class;
 
-    protected function getActions(): array
+    protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make((auth()->user()->is_editmode) ? 'Mode: Edit' : 'Mode: Normal')
+            Actions\Action::make('toggleEditMode')->label(fn () => auth()->user()->is_editmode ? 'Mode: Edit' : 'Mode: Normal')
                 ->action(
                     function () {
-                        $userData = User::find(auth()->user()->id);
+                        abort_unless(\App\Support\LegacyRkaAccess::canWrite(auth()->user()), 403);
+                        $userData = auth()->user();
                         $userData->is_editmode = !(auth()->user()->is_editmode);
                         $userData->save();
+                        $this->resetTable();
                     }
-                )->color(fn () => (auth()->user()->is_editmode) ? 'secondary' : 'primary')
-                ->hidden(Setting::find(1)->valbool),
-            Actions\CreateAction::make()->hidden(Setting::find(1)->valbool),
+                )->color(fn () => (auth()->user()->is_editmode) ? 'gray' : 'primary')
+                ->hidden(!\App\Support\LegacyRkaAccess::canWrite(auth()->user())),
+            Actions\CreateAction::make()->hidden(Setting::flag(1)),
         ];
     }
 

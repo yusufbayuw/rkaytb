@@ -2,11 +2,13 @@
 
 namespace App\Filament\Resources;
 
+use Filament\Actions;
+
 use Filament\Forms;
 use Filament\Tables;
 use App\Models\Position;
-use Filament\Resources\Form;
-use Filament\Resources\Table;
+use Filament\Schemas\Schema as Form;
+use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\TextInput;
 use Illuminate\Database\Eloquent\Builder;
@@ -21,7 +23,7 @@ class PositionResource extends Resource
 {
     protected static ?string $model = Position::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-collection';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-rectangle-stack';
 
     public static function form(Form $form): Form
     {
@@ -31,7 +33,7 @@ class PositionResource extends Resource
                     ->required()
                     ->maxLength(255),
                 Select::make('parent_id')->options(
-                    function (Closure $get) {
+                    function (\Filament\Schemas\Components\Utilities\Get $get) {
                         return Position::where('id', '!=', ($get('id')))->tree()->depthFirst()->pluck('nama', 'id');
                     }
                 ),
@@ -53,12 +55,12 @@ class PositionResource extends Resource
             ->filters([
                 //
             ])
-            ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
+            ->recordActions([
+                Actions\EditAction::make(),
+                Actions\DeleteAction::make(),
             ])
-            ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+            ->toolbarActions([
+                Actions\DeleteBulkAction::make(),
             ]);
     }
     

@@ -24,7 +24,9 @@ return [
          * `Spatie\Permission\Contracts\Role` contract.
          */
 
-        'role' => Spatie\Permission\Models\Role::class,
+        'role' => App\Models\Role::class,
+        'team' => null,
+        'default_model' => null,
 
     ],
 
@@ -102,6 +104,10 @@ return [
      */
 
     'register_permission_check_method' => true,
+    'register_octane_reset_listener' => false,
+    'events_enabled' => false,
+    'team_resolver' => Spatie\Permission\DefaultTeamResolver::class,
+    'use_passport_client_credentials' => false,
 
     /*
      * When set to true the package implements teams using the 'team_foreign_key'. If you want

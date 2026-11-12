@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use Filament\Actions;
+
 use Closure;
 use Filament\Forms;
 use App\Models\Akun;
@@ -9,12 +11,12 @@ use App\Models\Unit;
 use Filament\Tables;
 use App\Models\RkaGaji;
 use App\Models\Setting;
-use Filament\Resources\Form;
-use Filament\Resources\Table;
+use Filament\Schemas\Schema as Form;
+use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\Section;
+use Filament\Schemas\Components\Section;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Forms\Components\TextInput;
 use Filament\Tables\Columns\SelectColumn;
@@ -23,7 +25,7 @@ use Filament\Tables\Columns\TextInputColumn;
 use App\Filament\Resources\RkaGajiResource\Pages;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\RkaGajiResource\RelationManagers;
-use AlperenErsoy\FilamentExport\Actions\FilamentExportHeaderAction;
+use App\Filament\Actions\LegacyExportAction;
 
 class RkaGajiResource extends Resource
 {
@@ -35,7 +37,7 @@ class RkaGajiResource extends Resource
 
     public static function canCreate(): bool
     {
-        return \App\Support\LegacyRkaAccess::canView(auth()->user())
+        return \App\Support\LegacyRkaAccess::canWrite(auth()->user())
             && parent::canCreate();
     }
 
@@ -47,13 +49,13 @@ class RkaGajiResource extends Resource
 
     public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
     {
-        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, true)
+        return \App\Support\LegacyRkaAccess::canWrite(auth()->user()) && \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, true)
             && parent::canEdit($record);
     }
 
     public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
     {
-        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, true)
+        return \App\Support\LegacyRkaAccess::canWrite(auth()->user()) && \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, true)
             && parent::canDelete($record);
     }
 
@@ -65,13 +67,13 @@ class RkaGajiResource extends Resource
 
     protected static ?string $modelLabel = 'Rka Gaji';
 
-    protected static ?string $navigationIcon = 'heroicon-o-chart-bar';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-chart-bar';
 
     protected static ?string $slug = 'rka-gaji';
 
     protected static ?string $navigationLabel = 'RKA Gaji';
 
-    protected static ?string $navigationGroup = 'Rencana Kerja & Anggaran';
+    protected static string|\UnitEnum|null $navigationGroup = 'Rencana Kerja & Anggaran';
 
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
@@ -107,118 +109,54 @@ class RkaGajiResource extends Resource
                     ->options(
                         Unit::all()->pluck('nama', 'id')
                     )->default(auth()->user()->unit_id)
-                    ->disabled(!(auth()->user()->hasRole('superadmin'))),
+                    ->disabled(!(auth()->user()->hasRole('superadmin')))->dehydrated()
+                            ->dehydrateStateUsing(fn ($state) => auth()->user()->hasRole('superadmin') ? $state : auth()->user()->unit_id),
                 TextInput::make('total')
-                    ->numeric()
-                    ->mask(fn (TextInput\Mask $mask) => $mask
-                        ->numeric()
-                        ->decimalPlaces(2)
-                        ->decimalSeparator('.')
-                        ->thousandsSeparator(','),),
+                    ->numeric(),
                 Toggle::make('is_detail')
                     ->required()
-                    ->hidden(fn (Closure $get) => !($get('total') > 0))
+                    ->hidden(fn (\Filament\Schemas\Components\Utilities\Get $get) => !($get('total') > 0))
                     ->reactive()
                     ->label('Buat Rincian Bulanan'),
                 Section::make('Rencana Bulanan')
                     ->schema([
                         TextInput::make('januari')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
+                            ->default(0),
                         TextInput::make('februari')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
+                            ->default(0),
                         TextInput::make('maret')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
+                            ->default(0),
                         TextInput::make('april')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
+                            ->default(0),
                         TextInput::make('mei')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
+                            ->default(0),
                         TextInput::make('juni')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
+                            ->default(0),
                         TextInput::make('juli')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
+                            ->default(0),
                         TextInput::make('agustus')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
+                            ->default(0),
                         TextInput::make('september')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
+                            ->default(0),
                         TextInput::make('oktober')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
+                            ->default(0),
                         TextInput::make('november')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
+                            ->default(0),
                         TextInput::make('desember')
                             ->numeric()
-                            ->default(0)
-                            ->mask(fn (TextInput\Mask $mask) => $mask
-                                ->numeric()
-                                ->decimalPlaces(2)
-                                ->decimalSeparator('.')
-                                ->thousandsSeparator(','),),
-                    ])->hidden(function (Closure $get) {
+                            ->default(0),
+                    ])->hidden(function (\Filament\Schemas\Components\Utilities\Get $get) {
                         return (!$get('is_detail'));
                     }),
             ]);
@@ -227,16 +165,17 @@ class RkaGajiResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->paginationPageOptions([50, 100, 200, 300, 500])->defaultPaginationPageOption(50)
             ->columns([
-                (Setting::find(2)->valbool) ? TextColumn::make('nomor_akun')->formatStateUsing(function (RkaGaji $record) {
+                (Setting::flag(2)) ? TextColumn::make('nomor_akun')->formatStateUsing(function (RkaGaji $record) {
                     return (($record->is_parent) ? '' : 'Gaj-' . str_pad($record->id, 6, '0', STR_PAD_LEFT));
-                }) : ((auth()->user()->hasRole(['superadmin', 'admin-keuangan'])) ? SelectColumn::make('nomor_akun')->options(Akun::all()->pluck('nama', 'id')) : TextColumn::make('nomor_akun')),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('uraian') : TextColumn::make('uraian')
+                }) : ((auth()->user()->hasRole(['superadmin', 'admin-keuangan'])) ? SelectColumn::make('nomor_akun')->disabled(fn ($record) => !static::canEdit($record))->options(Akun::all()->pluck('nama', 'id')) : TextColumn::make('nomor_akun')),
+                (auth()->user()->is_editmode) ? TextInputColumn::make('uraian')->disabled(fn ($record) => !static::canEdit($record)) : TextColumn::make('uraian')
                     ->searchable(),
                 TextColumn::make('unit_nama')
                     ->label('Unit')
                     ->formatStateUsing(fn ($state) => Unit::find($state)->nama),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('total')->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('total')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('total')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('total')
                     ->formatStateUsing(fn ($state) => ($state !== null) ? number_format((float)$state) : null)
                     ->alignRight()->color(function (RkaGaji $record) {
                         if (!$record->is_parent) {
@@ -254,73 +193,73 @@ class RkaGajiResource extends Resource
                             }
                         }
                     }),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('januari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('januari')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('januari')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('januari')
                     ->formatStateUsing(function ($state) {
                        if ($state !== null) {
                             return number_format((float)$state);
                         }
                     })->sortable()->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('februari')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('februari')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('februari')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('februari')
                     ->formatStateUsing(function ($state) {
                         if ($state !== null) {
                             return number_format((float)$state);
                         }
                     })->sortable()->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('maret')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('maret')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('maret')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('maret')
                     ->formatStateUsing(function ($state) {
                         if ($state !== null) {
                             return number_format((float)$state);
                         }
                     })->sortable()->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('april')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('april')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('april')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('april')
                     ->formatStateUsing(function ($state) {
                         if ($state !== null) {
                             return number_format((float)$state);
                         }
                     })->sortable()->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('mei')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('mei')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('mei')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('mei')
                     ->formatStateUsing(function ($state) {
                         if ($state !== null) {
                             return number_format((float)$state);
                         }
                     })->sortable()->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('juni')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juni')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('juni')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juni')
                     ->formatStateUsing(function ($state) {
                         if ($state !== null) {
                             return number_format((float)$state);
                         }
                     })->sortable()->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('juli')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juli')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('juli')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('juli')
                     ->formatStateUsing(function ($state) {
                         if ($state !== null) {
                             return number_format((float)$state);
                         }
                     })->sortable()->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('agustus')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('agustus')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('agustus')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('agustus')
                     ->formatStateUsing(function ($state) {
                         if ($state !== null) {
                             return number_format((float)$state);
                         }
                     })->sortable()->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('september')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('september')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('september')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('september')
                     ->formatStateUsing(function ($state) {
                         if ($state !== null) {
                             return number_format((float)$state);
                         }
                     })->sortable()->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('oktober')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('oktober')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('oktober')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('oktober')
                     ->formatStateUsing(function ($state) {
                         if ($state !== null) {
                             return number_format((float)$state);
                         }
                     })->sortable()->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('november')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('november')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('november')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('november')
                     ->formatStateUsing(function ($state) {
                         if ($state !== null) {
                             return number_format((float)$state);
                         }
                     })->sortable()->alignRight(),
-                (auth()->user()->is_editmode) ? TextInputColumn::make('desember')->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('desember')
+                (auth()->user()->is_editmode) ? TextInputColumn::make('desember')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['numeric'])->type('number') : TextColumn::make('desember')
                     ->formatStateUsing(function ($state) {
                         if ($state !== null) {
                             return number_format((float)$state);
@@ -334,22 +273,24 @@ class RkaGajiResource extends Resource
             ->filters([
                 //
             ])
-            ->actions([
-                Tables\Actions\Action::make('duplikat')->action(function (RkaGaji $record) {
+            ->recordActions([
+                Actions\Action::make('duplikat')->action(function (RkaGaji $record) {
+                    abort_unless(static::canEdit($record), 403);
                     $data = RkaGaji::find($record->id);
-                    $newData = $data->replicate();
+                    $newData = $data->replicate(['depth', 'path']);
+                    \MrAdder\FilamentLogger\Support\ReplicationContextStore::remember($newData, $data);
                     $newData->uraian = $data->uraian . ' COPY';
                     $newData->save();
-                })->icon('heroicon-s-duplicate')->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
-                Tables\Actions\ViewAction::make()->hidden(!(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool)),
-                Tables\Actions\EditAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
-                Tables\Actions\DeleteAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
+                })->icon('heroicon-s-document-duplicate')->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::flag(1)),
+                Actions\ViewAction::make()->hidden(!(auth()->user()->hasRole('admin-keuangan') || Setting::flag(1))),
+                Actions\EditAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::flag(1)),
+                Actions\DeleteAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::flag(1)),
             ])
-            ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::find(1)->valbool),
+            ->toolbarActions([
+                Actions\DeleteBulkAction::make()->hidden(auth()->user()->hasRole('admin-keuangan') || Setting::flag(1)),
             ])
             ->headerActions([
-                FilamentExportHeaderAction::make('Export'),
+                LegacyExportAction::make('export'),
             ]);
     }
 

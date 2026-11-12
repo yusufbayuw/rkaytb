@@ -11,7 +11,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->scoped(\App\Support\LegacySettings::class);
     }
 
     /**
@@ -19,6 +19,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        \BezhanSalleh\FilamentShield\Facades\FilamentShield::buildPermissionKeyUsing(\App\Support\StandardPermissions::key(...));
+        \BezhanSalleh\FilamentShield\Facades\FilamentShield::prohibitDestructiveCommands($this->app->environment('production'));
+        $checks = [\Spatie\Health\Checks\Checks\DatabaseCheck::new(), \Spatie\Health\Checks\Checks\CacheCheck::new(),
+            \App\Health\StorageWritableCheck::new()];
+        if ($this->app->environment('production')) {
+            $checks[] = \Spatie\Health\Checks\Checks\DebugModeCheck::new();
+            $checks[] = \Spatie\Health\Checks\Checks\OptimizedAppCheck::new();
+        }
+        \Spatie\Health\Facades\Health::checks($checks);
     }
 }

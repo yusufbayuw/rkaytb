@@ -29,7 +29,7 @@ class RolePolicy
      */
     public function create(User $user): bool
     {
-        return $user->hasAnyPermission('create:role');
+        return \App\Support\SystemAccess::allowed();
     }
 
     /**
@@ -37,7 +37,7 @@ class RolePolicy
      */
     public function update(User $user, Role $role): bool
     {
-        return $user->hasAnyPermission('update:role');
+        return \App\Support\SystemAccess::allowed();
     }
 
     /**
@@ -45,6 +45,6 @@ class RolePolicy
      */
     public function delete(User $user, Role $role): bool
     {
-        return $user->hasAnyPermission('delete:role');
+        return $role->name !== 'superadmin' && \App\Support\SystemAccess::allowed();
     }
 }

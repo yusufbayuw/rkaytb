@@ -15,16 +15,16 @@ class RkaPlatformPanelAccessTest extends TestCase
     public function test_unassigned_account_is_not_allowed_into_filament(): void
     {
         $user = User::factory()->create(['unit_id' => null]);
-        $this->assertFalse($user->canAccessFilament());
+        $this->assertFalse($user->canAccessPanel(\Filament\Facades\Filament::getPanel('admin')));
 
         $org = Organization::create(['name' => 'Example Entity', 'slug' => 'example-entity']);
         $member = Membership::create([
             'organization_id' => $org->id, 'user_id' => $user->id,
             'roles' => ['contributor'], 'active' => true,
         ]);
-        $this->assertTrue($user->canAccessFilament());
+        $this->assertTrue($user->canAccessPanel(\Filament\Facades\Filament::getPanel('admin')));
         $member->update(['active' => false]);
-        $this->assertFalse($user->canAccessFilament());
+        $this->assertFalse($user->canAccessPanel(\Filament\Facades\Filament::getPanel('admin')));
     }
 
     public function test_existing_global_role_or_unit_assignment_keeps_panel_access(): void
@@ -32,10 +32,10 @@ class RkaPlatformPanelAccessTest extends TestCase
         $user = User::factory()->create(['unit_id' => null]);
         $role = Role::findOrCreate('finance_officer', 'web');
         $user->assignRole($role);
-        $this->assertTrue($user->canAccessFilament());
+        $this->assertTrue($user->canAccessPanel(\Filament\Facades\Filament::getPanel('admin')));
 
         $legacyUser = User::factory()->create(['unit_id' => null]);
         $legacyUser->unit_id = 123;
-        $this->assertTrue($legacyUser->canAccessFilament());
+        $this->assertTrue($legacyUser->canAccessPanel(\Filament\Facades\Filament::getPanel('admin')));
     }
 }

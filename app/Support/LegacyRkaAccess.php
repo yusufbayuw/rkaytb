@@ -8,6 +8,11 @@ use Illuminate\Database\Eloquent\Model;
 
 class LegacyRkaAccess
 {
+    public static function canWrite(?User $user): bool
+    {
+        return self::canView($user) && !$user->hasRole('admin-keuangan') && !\App\Models\Setting::flag(1);
+    }
+
     /**
      * Legacy RKA screens are scoped by the old users.unit_id field.
      * White-label RKA membership must not grant access to unrelated old tables.

@@ -13,6 +13,8 @@ class EmployeeKpiScore extends Model
 
     protected $guarded = [];
 
+    protected $attributes = ['score' => 0, 'max_point' => 0, 'subtotal' => 0];
+
     public function employee()
     {
         return $this->belongsTo(Employee::class);

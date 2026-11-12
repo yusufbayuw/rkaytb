@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources;
 
+use Filament\Actions;
+
 use Closure;
 use App\Models\Rka;
 use Filament\Forms;
@@ -9,8 +11,8 @@ use App\Models\Akun;
 use App\Models\Unit;
 use Filament\Tables;
 use App\Models\Setting;
-use Filament\Resources\Form;
-use Filament\Resources\Table;
+use Filament\Schemas\Schema as Form;
+use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
@@ -28,7 +30,7 @@ use App\Filament\Resources\RkaResource\Pages;
 use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use App\Filament\Resources\RkaResource\RelationManagers;
-use AlperenErsoy\FilamentExport\Actions\FilamentExportHeaderAction;
+use App\Filament\Actions\LegacyExportAction;
 
 class RkaResource extends Resource
 {
@@ -40,7 +42,7 @@ class RkaResource extends Resource
 
     public static function canCreate(): bool
     {
-        return \App\Support\LegacyRkaAccess::canView(auth()->user())
+        return \App\Support\LegacyRkaAccess::canWrite(auth()->user())
             && parent::canCreate();
     }
 
@@ -52,13 +54,13 @@ class RkaResource extends Resource
 
     public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
     {
-        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
+        return \App\Support\LegacyRkaAccess::canWrite(auth()->user()) && \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
             && parent::canEdit($record);
     }
 
     public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
     {
-        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
+        return \App\Support\LegacyRkaAccess::canWrite(auth()->user()) && \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
             && parent::canDelete($record);
     }
 
@@ -70,13 +72,13 @@ class RkaResource extends Resource
 
     protected static ?string $modelLabel = 'RKA Investasi';
 
-    protected static ?string $navigationIcon = 'heroicon-o-trending-up';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-arrow-trending-up';
 
     protected static ?string $slug = 'rka-investasi';
 
     protected static ?string $navigationLabel = 'RKA Investasi';
 
-    protected static ?string $navigationGroup = 'Rencana Kerja & Anggaran';
+    protected static string|\UnitEnum|null $navigationGroup = 'Rencana Kerja & Anggaran';
 
     public static function getEloquentQuery(): Builder
     {
@@ -152,14 +154,7 @@ class RkaResource extends Resource
     {
         return TextInput::make($month)
             ->numeric()
-            ->default(0)
-            ->mask(
-                fn (TextInput\Mask $mask) => $mask
-                    ->numeric()
-                    ->decimalPlaces(2)
-                    ->decimalSeparator('.')
-                    ->thousandsSeparator(',')
-            );
+            ->default(0);
     }
 
     private static function buatInput($name)
@@ -167,12 +162,7 @@ class RkaResource extends Resource
         return TextInput::make($name)
             ->debounce('1500ms')
             ->numeric()
-            ->mask(fn (TextInput\Mask $mask) => $mask
-                ->numeric()
-                ->decimalPlaces(2)
-                ->decimalSeparator('.')
-                ->thousandsSeparator(','),)
-            ->afterStateUpdated(function (Closure $get, $state, $set) use ($name) {
+            ->afterStateUpdated(function (\Filament\Schemas\Components\Utilities\Get $get, $state, $set) use ($name) {
                 $other = $name === 'volume' ? 'harga_satuan' : 'volume';
                 $otherValue = $get($other);
                 if (($otherValue > 0) && ($state > 0)) {
@@ -192,7 +182,7 @@ class RkaResource extends Resource
     {
         return $form
             ->schema([
-                Forms\Components\Section::make('Uraian')
+                \Filament\Schemas\Components\Section::make('Uraian')
                     ->schema([
                         TextInput::make('nomor_akun')
                             ->maxLength(255)
@@ -205,13 +195,14 @@ class RkaResource extends Resource
                             ->options(
                                 Unit::all()->pluck('nama', 'id')
                             )->default(auth()->user()->unit_id)
-                            ->disabled(!(auth()->user()->hasRole('superadmin'))),
+                            ->disabled(!(auth()->user()->hasRole('superadmin')))->dehydrated()
+                            ->dehydrateStateUsing(fn ($state) => auth()->user()->hasRole('superadmin') ? $state : auth()->user()->unit_id),
                         Toggle::make('is_parent')
                             ->required()
                             ->default(false)
                             ->reactive()
                             ->afterStateUpdated(
-                                function (Closure $get, $set) {
+                                function (\Filament\Schemas\Components\Utilities\Get $get, $set) {
                                     if ($get('is_parent')) {
                                         if ($get('parent_id') !== null) {
                                             $user = Rka::find($get('parent_id'))->ancestors;
@@ -230,7 +221,7 @@ class RkaResource extends Resource
                             ->label('Anggaran ini menginduk ke')
                             ->reactive()
                             ->options(
-                                function (Closure $get) {
+                                function (\Filament\Schemas\Components\Utilities\Get $get) {
                                     $unit_nama = auth()->user()->hasRole('superadmin') ? $get('unit_nama') : auth()->user()->unit_id;
 
                                     $query = Rka::where('is_parent', true)
@@ -246,7 +237,7 @@ class RkaResource extends Resource
                                 }
 
                             )->afterStateUpdated(
-                                function (Closure $get, $set, $state) {
+                                function (\Filament\Schemas\Components\Utilities\Get $get, $set, $state) {
                                     if ($get('is_parent')) {
                                         if ($state !== null) {
                                             $user = Rka::find($state)->ancestors;
@@ -261,7 +252,7 @@ class RkaResource extends Resource
                         Hidden::make('uraian_view'),
 
                     ]),
-                Forms\Components\Section::make('Rincian')
+                \Filament\Schemas\Components\Section::make('Rincian')
                     ->schema([
                         self::buatInput('volume'),
                         Select::make('satuan')
@@ -272,10 +263,10 @@ class RkaResource extends Resource
                         Hidden::make('total'),
                         Toggle::make('is_detail')
                             ->required()
-                            ->hidden(fn (Closure $get) => !($get('total') > 0))
+                            ->hidden(fn (\Filament\Schemas\Components\Utilities\Get $get) => !($get('total') > 0))
                             ->reactive()
                             ->label('Buat Rincian Bulanan'),
-                        Forms\Components\Section::make('Rencana Bulanan')
+                        \Filament\Schemas\Components\Section::make('Rencana Bulanan')
                             ->schema([
                                 self::buatMonthInput('januari'),
                                 self::buatMonthInput('februari'),
@@ -289,10 +280,10 @@ class RkaResource extends Resource
                                 self::buatMonthInput('oktober'),
                                 self::buatMonthInput('november'),
                                 self::buatMonthInput('desember'),
-                            ])->hidden(function (Closure $get) {
+                            ])->hidden(function (\Filament\Schemas\Components\Utilities\Get $get) {
                                 return (!$get('is_detail'));
                             }),
-                    ])->hidden(function (Closure $get) {
+                    ])->hidden(function (\Filament\Schemas\Components\Utilities\Get $get) {
                         return $get('is_parent');
                     }),
 
@@ -303,7 +294,7 @@ class RkaResource extends Resource
     public static function buatColumn($month)
     {
         if (auth()->user()->is_editmode) {
-            return TextInputColumn::make($month)
+            return TextInputColumn::make($month)->disabled(fn ($record) => !static::canEdit($record))
                 ->alignRight()
                 ->rules(['numeric'])
                 ->type('number');
@@ -348,26 +339,27 @@ class RkaResource extends Resource
         $authUser = auth()->user();
         $isEditMode = $authUser->is_editmode;
         $units = $units = Unit::all()->pluck('nama', 'id')->toArray();
-        $isAdminKeuangan = $authUser->hasRole('admin-keuangan') || Setting::find(1)->valbool;
+        $isAdminKeuangan = $authUser->hasRole('admin-keuangan') || Setting::flag(1);
         $isSuperandKeu = $authUser->hasRole(['superadmin', 'admin-keuangan']);
-        $settingValBool = Setting::find(2)->valbool;
+        $settingValBool = Setting::flag(2);
         $akunOptions  =  Akun::all()->pluck('nama', 'id');
         return $table
+            ->paginationPageOptions([50, 100, 200, 300, 500])->defaultPaginationPageOption(50)
             ->columns([
                 ($settingValBool) ?
                     TextColumn::make('nomor_akun')->formatStateUsing(function (Rka $record) {
                         return (($record->is_parent) ? '' : 'Inv-' . str_pad($record->id, 6, '0', STR_PAD_LEFT));
                     })->grow(false)
                     : (($isSuperandKeu) ?
-                        SelectColumn::make('nomor_akun')->options($akunOptions)->grow(false)
+                        SelectColumn::make('nomor_akun')->disabled(fn ($record) => !static::canEdit($record))->options($akunOptions)->grow(false)
                         : TextColumn::make('nomor_akun'))->grow(false),
                 ($isEditMode) ?
-                    TextInputColumn::make('uraian')->grow(false)
+                    TextInputColumn::make('uraian')->disabled(fn ($record) => !static::canEdit($record))->grow(false)
                     :
                     TextColumn::make('uraian')
                     ->icon(function (Rka $record) {
                         if (!$record->is_parent && $record->parent_id !== null) {
-                            return 'heroicon-o-dots-horizontal';
+                            return 'heroicon-o-ellipsis-horizontal';
                         }
                     })->grow(false)
                     ->weight(function (Rka $record) {
@@ -387,15 +379,15 @@ class RkaResource extends Resource
                 TextColumn::make('unit_nama')
                     ->label('Unit')
                     ->formatStateUsing(fn ($state) =>  $units[$state] ?? null),
-                ($isEditMode) ? TextInputColumn::make('volume')
+                ($isEditMode) ? TextInputColumn::make('volume')->disabled(fn ($record) => !static::canEdit($record))
                     ->alignRight()
                     ->rules(['required', 'numeric'])
                     ->type('number')
                     : TextColumn::make('volume')
                     ->formatStateUsing(fn ($state) => ($state !== null) ? number_format((float)$state) : null)
                     ->alignRight(),
-                ($isEditMode) ? SelectColumn::make('satuan')->options(config('conf_variable.satuan')) : TextColumn::make('satuan'),
-                ($isEditMode) ? TextInputColumn::make('harga_satuan')->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('harga_satuan')
+                ($isEditMode) ? SelectColumn::make('satuan')->disabled(fn ($record) => !static::canEdit($record))->options(config('conf_variable.satuan')) : TextColumn::make('satuan'),
+                ($isEditMode) ? TextInputColumn::make('harga_satuan')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('harga_satuan')
                     ->formatStateUsing(fn ($state) => ($state !== null) ? number_format((float)$state) : null)
                     ->alignRight(),
                 TextColumn::make('total')
@@ -473,27 +465,23 @@ class RkaResource extends Resource
             ->filters([
                 //
             ])
-            ->actions([
-                Tables\Actions\Action::make('duplikat')
+            ->recordActions([
+                Actions\Action::make('duplikat')
                     ->action(function (Rka $record) {
-                        $newData = $record->replicate();
+                        $newData = $record->replicate(['depth', 'path']);
+                        \MrAdder\FilamentLogger\Support\ReplicationContextStore::remember($newData, $record);
                         $newData->uraian = $record->uraian . ' COPY';
                         $newData->save();
                     })
-                    ->icon('heroicon-s-duplicate')
+                    ->icon('heroicon-s-document-duplicate')
                     ->hidden($isAdminKeuangan),
-                Tables\Actions\ViewAction::make()->hidden(!$isAdminKeuangan),
-                Tables\Actions\EditAction::make()->hidden($isAdminKeuangan),
-                Tables\Actions\DeleteAction::make()->hidden($isAdminKeuangan),
+                Actions\ViewAction::make()->hidden(!$isAdminKeuangan),
+                Actions\EditAction::make()->hidden($isAdminKeuangan),
+                Actions\DeleteAction::make()->hidden($isAdminKeuangan),
             ])
             ->headerActions([
-                FilamentExportHeaderAction::make('Export'),
+                LegacyExportAction::make('export'),
             ]);
-    }
-
-    protected function paginateTableQuery(Builder $query): Paginator
-    {
-        return $query->fastPaginate($this->getTableRecordsPerPage());
     }
 
     public static function getPages(): array

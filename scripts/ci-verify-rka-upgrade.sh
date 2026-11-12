@@ -55,8 +55,9 @@ echo "[CI] Expanding schema without rewriting legacy budget rows"
 php artisan migrate --force
 php scripts/ci_rka_upgrade.php expanded
 
-echo "[CI] Rolling back only the nine additive platform migrations"
-php artisan migrate:rollback --step=9 --force
+platform_migration_count=$(find database/migrations -maxdepth 1 -type f -name '2026_*.php' | wc -l | tr -d ' ')
+echo "[CI] Rolling back only the ${platform_migration_count} additive platform migrations"
+php artisan migrate:rollback --step="$platform_migration_count" --force
 php scripts/ci_rka_upgrade.php rolledback
 
 echo "[CI] Re-applying new migrations after rollback"

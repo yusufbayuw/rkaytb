@@ -45,9 +45,10 @@ class User extends Authenticatable implements FilamentUser
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'is_editmode' => 'boolean',
     ];
 
-    public function canAccessFilament(): bool
+    public function canAccessPanel(\Filament\Panel $panel): bool
     {
         // Keep existing role-based and unit-based users working. An account with
         // no role, unit or active RKA membership should not reach the admin panel.

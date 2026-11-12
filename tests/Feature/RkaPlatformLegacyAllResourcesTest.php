@@ -82,7 +82,7 @@ class RkaPlatformLegacyAllResourcesTest extends TestCase
             $path = app_path('Filament/Resources/'.$resource.'.php');
             $code = file_get_contents($path);
             $start = strpos($code, 'public static function table(');
-            $end = strpos($code, '->actions([', $start ?: 0);
+            $end = strpos($code, '->recordActions([', $start ?: 0);
             $this->assertNotFalse($start, $resource);
             $this->assertNotFalse($end, $resource);
             $rendering = substr($code, $start, $end - $start);
