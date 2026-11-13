@@ -38,7 +38,7 @@ class FilamentUpgradeTest extends TestCase
         $this->admin();
         $this->assertSame(0, Setting::count());
         $resources = Filament::getPanel('admin')->getResources();
-        $this->assertCount(17, $resources);
+        $this->assertCount(9, $resources);
         foreach ($resources as $resource) {
             $this->get($resource::getUrl('index', panel: 'admin'))->assertOk();
             $page = $resource::getPages()['index']->getPage();
@@ -96,14 +96,10 @@ class FilamentUpgradeTest extends TestCase
     {
         $this->admin();
         $widgets = [
-            \App\Filament\Resources\RkaResource\Widgets\TotalOverview::class,
-            \App\Filament\Resources\RkaMaintenanceResource\Widgets\TotalMaintenanceOverview::class,
-            \App\Filament\Resources\RkaConsumableResource\Widgets\TotalConsumableOverview::class,
-            \App\Filament\Resources\RkaOperasionalResource\Widgets\TotalOperasionalOverview::class,
-            \App\Filament\Resources\RkaPendapatanResource\Widgets\TotalPendapatanOverview::class,
-            \App\Filament\Resources\RkaGajiResource\Widgets\TotalGajiOverview::class,
+            \App\Filament\Widgets\RkaOverview::class,
+            \App\Filament\Widgets\StatsOverview::class,
         ];
-        foreach ($widgets as $widget) Livewire::withoutLazyLoading()->test($widget)->assertSee('Grand Total (Semua Unit)');
+        foreach ($widgets as $widget) Livewire::withoutLazyLoading()->test($widget)->assertSee('Total Belanja')->assertSee('Total Pendapatan');
         $this->actingAs(User::factory()->create(['unit_id' => null]));
         foreach ($widgets as $widget) Livewire::withoutLazyLoading()->test($widget)->assertSee('Unit Belum Ditugaskan');
     }

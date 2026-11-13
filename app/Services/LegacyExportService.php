@@ -34,7 +34,10 @@ class LegacyExportService
             $row = [];
             foreach ($selected as $key) {
                 $value = ($definitions[$key]['value'])($record);
-                if (($definitions[$key]['numeric'] ?? false) && is_numeric($value)) $value = (float) $value;
+                // Excel numbers retain at most 15 significant digits. Keep larger
+                // historical amounts as text so their decimal cents survive export.
+                if (($definitions[$key]['numeric'] ?? false) && is_numeric($value)
+                    && strlen(ltrim(str_replace(['.', '-', '+'], '', (string) $value), '0')) <= 15) $value = (float) $value;
                 $row[] = is_scalar($value) || $value === null ? $value : (string) $value;
             }
             foreach ($extra as $column) $row[] = (string) ($column['value'] ?? '');

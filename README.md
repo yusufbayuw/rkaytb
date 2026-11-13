@@ -2,6 +2,8 @@
 
 Aplikasi Rencana Kerja dan Anggaran dengan Laravel 13, Filament 5, dan Livewire 4. Modul RKA existing tetap tersedia bersama Workspace RKA untuk organisasi, anggaran, sharing budget, jurnal, approval, rekonsiliasi, closing, narasi, bukti privat, dan Buku RKA.
 
+Modul Employee KPI Score, Employee, KPI Target, dan Position telah dihapus pada 13 November 2026, termasuk resource, halaman, model, event, listener, dan fixture terkait. Panel memiliki 13 resource aktif. Migrasi serta tabel historis pegawai dipertahankan untuk kompatibilitas database existing; penghapusan modul tidak menghapus data historis. Audit lama tetap dapat dibaca dan diekspor. KPI anggaran/unit di Workspace merupakan bagian dari alur keuangan RKA.
+
 ## Kebutuhan
 
 - PHP 8.4 dan Composer 2.

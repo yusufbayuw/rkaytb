@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Pages\{SystemHealth, SystemLogs};
 use App\Filament\Resources\{RoleResource, SystemActivityResource, UnitResource};
-use App\Models\{Rka, Unit, User, Role};
+use App\Models\{RkaEntry as Rka, RkaCategory, Unit, User, Role};
 use App\Services\AccessManagement;
 use App\Support\StandardPermissions;
 use Filament\Facades\Filament;
@@ -113,7 +113,9 @@ class OperationalPluginsTest extends TestCase
     public function test_audit_records_single_changes_and_rolls_back_with_business_transactions(): void
     {
         Activity::query()->delete();
-        $row = Rka::create(['uraian' => 'Audit budget', 'unit_nama' => '1', 'is_parent' => false, 'volume' => 2, 'harga_satuan' => 12.5]);
+        $unit = Unit::create(['nama' => 'Audit unit']);
+        Activity::query()->delete();
+        $row = Rka::create(['category_id' => RkaCategory::where('code', 'investment')->value('id'), 'uraian' => 'Audit budget', 'unit_nama' => (string) $unit->id, 'is_parent' => false, 'volume' => 2, 'harga_satuan' => 12.5]);
         $this->assertSame(1, Activity::where('subject_type', Rka::class)->where('subject_id', $row->id)->where('event', 'Created')->count());
         $row->update(['volume' => 3]);
         $this->assertSame(1, Activity::where('subject_type', Rka::class)->where('subject_id', $row->id)->where('event', 'Updated')->count());

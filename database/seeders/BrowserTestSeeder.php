@@ -2,7 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\{Akun, Employee, KpiTarget, Position, Rka, RkaConsumable, RkaGaji, RkaMaintenance, RkaOperasional, RkaPendapatan, Setting, Unit, User};
+use App\Models\{Akun, Rka, RkaConsumable, RkaGaji, RkaMaintenance, RkaOperasional, RkaPendapatan, Setting, Unit, User};
 use App\Models\RkaPlatform\{BudgetLine, Cycle, Membership, Organization, Unit as OrganizationUnit};
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -52,10 +52,7 @@ class BrowserTestSeeder extends Seeder
             'created_at' => now(), 'updated_at' => now()];
         // Zero-value fixture rows preserve the root's financial aggregate.
         DB::table('rkas')->insert($rows);
-        $position = Position::create(['nama' => 'Jabatan Uji']);
-        $target = KpiTarget::create(['nama' => 'Target Uji']);
-        $position->kpiTargets()->attach($target);
-        Employee::create(['nama' => 'Pegawai Uji', 'unit_id' => $a->id, 'position_id' => $position->id]);
+        app(\App\Services\RkaConsolidation::class)->import();
         foreach (['A', 'B'] as $suffix) {
             $org = Organization::create(['name' => 'Organisasi Uji '.$suffix, 'brand_name' => 'Organisasi Uji '.$suffix,
                 'slug' => 'organization-'.$suffix, 'currency' => 'IDR', 'locale' => 'id', 'timezone' => 'Asia/Jakarta']);

@@ -77,8 +77,7 @@ class RkaPlatformLegacyAllResourcesTest extends TestCase
 
     public function test_all_legacy_financial_table_formatters_are_read_only(): void
     {
-        foreach (['RkaMaintenanceResource','RkaConsumableResource',
-            'RkaOperasionalResource','RkaPendapatanResource','RkaResource'] as $resource) {
+        foreach (['RkaResource'] as $resource) {
             $path = app_path('Filament/Resources/'.$resource.'.php');
             $code = file_get_contents($path);
             $start = strpos($code, 'public static function table(');

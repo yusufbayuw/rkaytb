@@ -111,5 +111,7 @@ jobs:
           php artisan key:generate --force
       - name: Full MySQL regression suite
         run: php artisan test
+      - name: Concurrent financial updates
+        run: RKA_CONCURRENCY_TEST=1 php scripts/verify-rka-concurrency.php
       - name: Non-destructive migration rehearsal
         run: bash scripts/ci-verify-rka-upgrade.sh

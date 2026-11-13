@@ -183,6 +183,11 @@ class LegacyRkaTotals
         return (float)$value;
     }
 
+    public function spellAmount(string $amount): string
+    {
+        return $this->spell((int) explode('.', $amount)[0]);
+    }
+
     private function spell(int $amount): string
     {
         if ($amount === 0) return 'Nol';

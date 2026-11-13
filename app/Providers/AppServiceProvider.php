@@ -12,6 +12,8 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->scoped(\App\Support\LegacySettings::class);
+        $this->app->scoped(\App\Support\RkaEntryAccess::class);
+        $this->app->bind(\MrAdder\FilamentLogger\Support\ActivityExporter::class, \App\Services\HistoricalActivityExporter::class);
     }
 
     /**

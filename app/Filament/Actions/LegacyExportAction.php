@@ -25,7 +25,8 @@ class LegacyExportAction extends Action
                 Select::make('format')->options(['xlsx' => 'Excel (XLSX)', 'csv' => 'CSV', 'pdf' => 'PDF'])->default('xlsx')->required(),
                 Select::make('orientation')->label('Orientasi')->options(['portrait' => 'Potret', 'landscape' => 'Lanskap'])->default('portrait')->required()->live(),
                 CheckboxList::make('columns')->label('Kolom')->options(fn ($livewire) => $this->options($livewire))
-                    ->default(fn ($livewire) => array_keys($this->options($livewire)))->required()->live()->columns(3),
+                    ->default(fn ($livewire) => method_exists($livewire::getResource(), 'defaultExportColumns')
+                        ? $livewire::getResource()::defaultExportColumns() : array_keys($this->options($livewire)))->required()->live()->columns(3),
                 Repeater::make('extra')->label('Kolom tambahan')->maxItems(10)->schema([
                     TextInput::make('title')->label('Judul')->required()->maxLength(100),
                     TextInput::make('value')->label('Nilai')->maxLength(255),
@@ -65,7 +66,7 @@ class LegacyExportAction extends Action
     {
         $definitions = [];
         foreach ($livewire->getTable()->getColumns() as $column) {
-            $numeric = in_array($column->getName(), ['volume', 'harga_satuan', 'total', 'januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'], true);
+            $numeric = in_array($column->getName(), ['volume', 'harga_satuan', 'total', 'monthly_balance', 'januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'], true);
             $definitions[$column->getName()] = [
                 'label' => $column->getLabel(),
                 'numeric' => $numeric,

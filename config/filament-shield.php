@@ -18,10 +18,8 @@ $config['policies']['generate'] = false;
 $config['policies']['methods'] = ['viewAny', 'view', 'create', 'update', 'delete'];
 $config['resources']['manage'] = [];
 $config['resources']['exclude'] = [
-    Resources\RkaResource::class, Resources\RkaGajiResource::class, Resources\RkaConsumableResource::class,
-    Resources\RkaMaintenanceResource::class, Resources\RkaOperasionalResource::class, Resources\RkaPendapatanResource::class,
-    Resources\EmployeeResource::class, Resources\EmployeeKpiScoreResource::class, Resources\KpiTargetResource::class,
-    Resources\PositionResource::class, Resources\SystemActivityResource::class,
+    Resources\RkaResource::class, Resources\RkaCategoryResource::class,
+    Resources\SystemActivityResource::class,
 ];
 $config['pages']['exclude'] = [Filament\Pages\Dashboard::class, Pages\AccountProfile::class,
     Pages\RkaPlatformWorkspace::class, Pages\SystemHealth::class, Pages\SystemLogs::class];

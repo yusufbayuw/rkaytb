@@ -2,492 +2,168 @@
 
 namespace App\Filament\Resources;
 
-use Filament\Actions;
-
-use Closure;
-use App\Models\Rka;
-use Filament\Forms;
-use App\Models\Akun;
-use App\Models\Unit;
-use Filament\Tables;
-use App\Models\Setting;
-use Filament\Schemas\Schema as Form;
-use Filament\Tables\Table;
-use Filament\Resources\Resource;
-use Filament\Forms\Components\Hidden;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Toggle;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Columns\TextColumn;
-use Illuminate\Database\Eloquent\Model;
-use Filament\Forms\Components\TextInput;
-use Filament\Tables\Columns\Layout\Split;
-use Filament\Tables\Columns\Layout\Stack;
-use Filament\Tables\Columns\SelectColumn;
-use Illuminate\Database\Eloquent\Builder;
-use Filament\Tables\Columns\TextInputColumn;
-use App\Filament\Resources\RkaResource\Pages;
-use Illuminate\Contracts\Pagination\Paginator;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\RkaResource\RelationManagers;
 use App\Filament\Actions\LegacyExportAction;
+use App\Models\{Akun, RkaCategory, RkaEntry, Setting, Unit};
+use App\Support\{RkaDecimal, RkaEntryAccess};
+use Filament\Actions;
+use Filament\Forms\Components\{Select, TextInput, Toggle};
+use Filament\Schemas\Components\{Section, Utilities\Get, Utilities\Set};
+use Filament\Schemas\Schema;
+use Filament\Resources\Resource;
+use Filament\Tables\Columns\{TextColumn, TextInputColumn, SelectColumn};
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\{Builder, Model};
 
 class RkaResource extends Resource
 {
-    public static function canViewAny(): bool
-    {
-        return \App\Support\LegacyRkaAccess::canView(auth()->user())
-            && parent::canViewAny();
-    }
-
-    public static function canCreate(): bool
-    {
-        return \App\Support\LegacyRkaAccess::canWrite(auth()->user())
-            && parent::canCreate();
-    }
-
-    public static function canView(\Illuminate\Database\Eloquent\Model $record): bool
-    {
-        return \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
-            && parent::canView($record);
-    }
-
-    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
-    {
-        return \App\Support\LegacyRkaAccess::canWrite(auth()->user()) && \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
-            && parent::canEdit($record);
-    }
-
-    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
-    {
-        return \App\Support\LegacyRkaAccess::canWrite(auth()->user()) && \App\Support\LegacyRkaAccess::canAccessRecord(auth()->user(), $record, false)
-            && parent::canDelete($record);
-    }
-
-    public static function shouldRegisterNavigation(): bool
-    {
-        return self::canViewAny() && parent::shouldRegisterNavigation();
-    }
-    protected static ?string $model = Rka::class;
-
-    protected static ?string $modelLabel = 'RKA Investasi';
-
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-arrow-trending-up';
-
-    protected static ?string $slug = 'rka-investasi';
-
-    protected static ?string $navigationLabel = 'RKA Investasi';
-
+    protected static ?string $model = RkaEntry::class;
+    protected static ?string $slug = 'rka';
+    protected static ?string $modelLabel = 'RKA';
+    protected static ?string $pluralModelLabel = 'RKA';
+    protected static ?string $navigationLabel = 'RKA';
     protected static string|\UnitEnum|null $navigationGroup = 'Rencana Kerja & Anggaran';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-table-cells';
+
+    public static function canViewAny(): bool { return RkaEntryAccess::canViewAny(); }
+    public static function canCreate(): bool { return RkaEntryAccess::canWrite(); }
+    public static function canView(Model $record): bool { return $record instanceof RkaEntry && RkaEntryAccess::canView($record); }
+    public static function canEdit(Model $record): bool { return static::canView($record) && RkaEntryAccess::canWrite(); }
+    public static function canDelete(Model $record): bool { return static::canEdit($record); }
+    public static function canDeleteAny(): bool { return RkaEntryAccess::canWrite(); }
 
     public static function getEloquentQuery(): Builder
     {
-        // Mendapatkan user sekaligus untuk menghindari pemanggilan berulang ke auth()->user()
-        $user = auth()->user();
-
         $query = parent::getEloquentQuery();
-
-        // Jika user bukan superadmin, tambahkan filter unit_nama ke query
-        if (!$user->hasRole('superadmin')) {
-            $query->where('unit_nama', $user->unit_id);
-        }
-
-        // Jika user dalam mode edit, filter isLeaf, jika tidak filter tree dan depthFirst
-        if ($user->is_editmode) {
-            $query->isLeaf();
-        } else {
-            $query->tree()->orderBy('path', 'desc');
-            $query->depthFirst();
-        }
-
-        if ($user->hasRole('superadmin')) {
-            $query->orderBy('unit_nama', 'asc');
-        }
-
-        return $query;
+        $query = auth()->user()?->is_editmode ? $query->isLeaf() : $query->tree()->depthFirst();
+        return RkaEntryAccess::scope($query)->with('category');
     }
 
+    private static function mode(Get $get): ?string { return RkaCategory::find($get('category_id'))?->calculation_mode; }
 
-    private static function terbilang($angka)
+    public static function form(Schema $schema): Schema
     {
-        $angka = abs($angka);
-        $bilangan = array('', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'delapan', 'sembilan', 'sepuluh', 'sebelas');
-
-        if ($angka < 12) {
-            return $bilangan[$angka];
-        } else if ($angka < 20) {
-            return $bilangan[$angka - 10] . ' belas';
-        } else if ($angka < 100) {
-            $hasil_bagi = (int)($angka / 10);
-            $hasil_mod = $angka % 10;
-            return trim(sprintf('%s puluh %s', $bilangan[$hasil_bagi], $bilangan[$hasil_mod]));
-        } else if ($angka < 200) {
-            return sprintf('seratus %s', self::terbilang($angka - 100));
-        } else if ($angka < 1000) {
-            $hasil_bagi = (int)($angka / 100);
-            $hasil_mod = $angka % 100;
-            return trim(sprintf('%s ratus %s', $bilangan[$hasil_bagi], self::terbilang($hasil_mod)));
-        } else if ($angka < 2000) {
-            return trim(sprintf('seribu %s', self::terbilang($angka - 1000)));
-        } else if ($angka < 1000000) {
-            $hasil_bagi = (int)($angka / 1000);
-            $hasil_mod = $angka % 1000;
-            return sprintf('%s ribu %s', self::terbilang($hasil_bagi), self::terbilang($hasil_mod));
-        } else if ($angka < 1000000000) {
-            $hasil_bagi = (int)($angka / 1000000);
-            $hasil_mod = $angka % 1000000;
-            return trim(sprintf('%s juta %s', self::terbilang($hasil_bagi), self::terbilang($hasil_mod)));
-        } else if ($angka < 1000000000000) {
-            $hasil_bagi = (int)($angka / 1000000000);
-            $hasil_mod = $angka % 1000000000;
-            return trim(sprintf('%s milyar %s', self::terbilang($hasil_bagi), self::terbilang($hasil_mod)));
-        } else if ($angka < 1000000000000000) {
-            $hasil_bagi = $angka / 1000000000000;
-            $hasil_mod = $angka % 1000000000000;
-            return trim(sprintf('%s triliun %s', self::terbilang($hasil_bagi), self::terbilang($hasil_mod)));
-        } else {
-            return 'Angka terlalu besar';
-        }
-    }
-
-    private static function buatMonthInput($month)
-    {
-        return TextInput::make($month)
-            ->numeric()
-            ->default(0);
-    }
-
-    private static function buatInput($name)
-    {
-        return TextInput::make($name)
-            ->debounce('1500ms')
-            ->numeric()
-            ->afterStateUpdated(function (\Filament\Schemas\Components\Utilities\Get $get, $state, $set) use ($name) {
-                $other = $name === 'volume' ? 'harga_satuan' : 'volume';
-                $otherValue = $get($other);
-                if (($otherValue > 0) && ($state > 0)) {
-                    $total_ = $otherValue * $state;
-                    $set('total_view', number_format($total_, 2, '.', ','));
-                    $set('total', $total_);
-                    $set('total_terbilang', self::terbilang($total_));
-                } else {
-                    $set('total_view', 0);
-                    $set('total', 0);
-                    $set('total_terbilang', 'Nol');
-                }
-            });
-    }
-
-    public static function form(Form $form): Form
-    {
-        return $form
-            ->schema([
-                \Filament\Schemas\Components\Section::make('Uraian')
-                    ->schema([
-                        TextInput::make('nomor_akun')
-                            ->maxLength(255)
-                            ->hidden(),
-                        TextInput::make('uraian')
-                            ->required()
-                            ->maxLength(255),
-                        Select::make('unit_nama')
-                            ->required()
-                            ->options(
-                                Unit::all()->pluck('nama', 'id')
-                            )->default(auth()->user()->unit_id)
-                            ->disabled(!(auth()->user()->hasRole('superadmin')))->dehydrated()
-                            ->dehydrateStateUsing(fn ($state) => auth()->user()->hasRole('superadmin') ? $state : auth()->user()->unit_id),
-                        Toggle::make('is_parent')
-                            ->required()
-                            ->default(false)
-                            ->reactive()
-                            ->afterStateUpdated(
-                                function (\Filament\Schemas\Components\Utilities\Get $get, $set) {
-                                    if ($get('is_parent')) {
-                                        if ($get('parent_id') !== null) {
-                                            $user = Rka::find($get('parent_id'))->ancestors;
-                                            $depth = count($user);
-                                            $set('uraian_view', str_repeat('-', $depth + 1) . ' ' . $get('uraian'));
-                                        } else {
-                                            $set('uraian_view', $get('uraian'));
-                                        }
-                                    } else {
-                                        $set('uraian_view', null);
-                                    }
-                                }
-                            )
-                            ->label('Jadikan Anggaran Induk'),
-                        Select::make('parent_id')
-                            ->label('Anggaran ini menginduk ke')
-                            ->reactive()
-                            ->options(
-                                function (\Filament\Schemas\Components\Utilities\Get $get) {
-                                    $unit_nama = auth()->user()->hasRole('superadmin') ? $get('unit_nama') : auth()->user()->unit_id;
-
-                                    $query = Rka::where('is_parent', true)
-                                        ->where('unit_nama', $unit_nama);
-
-                                    if ($get('is_parent')) {
-                                        $query->where('id', '!=', $get('id'));
-                                    }
-
-                                    return $query->tree()
-                                        ->depthFirst()
-                                        ->pluck('uraian_view', 'id');
-                                }
-
-                            )->afterStateUpdated(
-                                function (\Filament\Schemas\Components\Utilities\Get $get, $set, $state) {
-                                    if ($get('is_parent')) {
-                                        if ($state !== null) {
-                                            $user = Rka::find($state)->ancestors;
-                                            $depth = count($user);
-                                            $set('uraian_view', str_repeat('-', $depth + 1) . ' ' . $get('uraian'));
-                                        } else {
-                                            $set('uraian_view', $get('uraian'));
-                                        }
-                                    }
-                                }
-                            ),
-                        Hidden::make('uraian_view'),
-
-                    ]),
-                \Filament\Schemas\Components\Section::make('Rincian')
-                    ->schema([
-                        self::buatInput('volume'),
-                        Select::make('satuan')
-                            ->options(config('conf_variable.satuan'))->searchable(),
-                        self::buatInput('harga_satuan'),
-                        TextInput::make('total_view')->label('Total (Rupiah)')->disabled(),
-                        TextInput::make('total_terbilang')->label('Terbilang')->disabled(),
-                        Hidden::make('total'),
-                        Toggle::make('is_detail')
-                            ->required()
-                            ->hidden(fn (\Filament\Schemas\Components\Utilities\Get $get) => !($get('total') > 0))
-                            ->reactive()
-                            ->label('Buat Rincian Bulanan'),
-                        \Filament\Schemas\Components\Section::make('Rencana Bulanan')
-                            ->schema([
-                                self::buatMonthInput('januari'),
-                                self::buatMonthInput('februari'),
-                                self::buatMonthInput('maret'),
-                                self::buatMonthInput('april'),
-                                self::buatMonthInput('mei'),
-                                self::buatMonthInput('juni'),
-                                self::buatMonthInput('juli'),
-                                self::buatMonthInput('agustus'),
-                                self::buatMonthInput('september'),
-                                self::buatMonthInput('oktober'),
-                                self::buatMonthInput('november'),
-                                self::buatMonthInput('desember'),
-                            ])->hidden(function (\Filament\Schemas\Components\Utilities\Get $get) {
-                                return (!$get('is_detail'));
-                            }),
-                    ])->hidden(function (\Filament\Schemas\Components\Utilities\Get $get) {
-                        return $get('is_parent');
+        return $schema->components([
+            Section::make('Anggaran')->schema([
+                Select::make('category_id')->label('Kategori')->required()->native()->live()
+                    ->options(fn (?RkaEntry $record) => RkaCategory::where('is_active', true)
+                        ->when($record, fn ($q) => $q->orWhereKey($record->category_id))->orderBy('sort_order')->pluck('name', 'id'))
+                    ->default(fn ($livewire) => is_numeric($livewire->activeTab ?? null) ? $livewire->activeTab : null)
+                    ->disabled(fn (?RkaEntry $record) => $record !== null)
+                    ->afterStateUpdated(function (Set $set): void {
+                        foreach (['parent_id', 'volume', 'harga_satuan', 'total'] as $field) $set($field, null);
                     }),
-
-
-            ]);
+                TextInput::make('uraian')->label('Uraian')->required()->maxLength(255),
+                Select::make('unit_nama')->label('Unit')->options(fn () => Unit::orderBy('nama')->pluck('nama', 'id'))
+                    ->required()->default(fn () => auth()->user()->unit_id)->live()->dehydrated()
+                    ->disabled(fn () => !RkaEntryAccess::superadmin())
+                    ->dehydrateStateUsing(fn ($state) => RkaEntryAccess::superadmin() ? $state : auth()->user()->unit_id)
+                    ->afterStateUpdated(fn (Set $set) => $set('parent_id', null)),
+                Toggle::make('is_parent')->label('Jadikan Anggaran Induk')->live()->default(false),
+                Select::make('parent_id')->label('Anggaran ini menginduk ke')->nullable()
+                    ->options(fn (Get $get, ?RkaEntry $record) => RkaEntryAccess::scope(RkaEntry::query())
+                        ->where('category_id', $get('category_id'))->where('unit_nama', $get('unit_nama'))
+                        ->where('is_parent', true)->when($record, fn ($q) => $q->whereKeyNot($record->id))
+                        ->orderBy('uraian')->pluck('uraian', 'id')),
+                Select::make('nomor_akun')->label('Nomor akun')->options(function (?RkaEntry $record) {
+                    $options = Akun::orderBy('nama')->pluck('nama', 'id')->all();
+                    if ($record?->nomor_akun !== null && !isset($options[$record->nomor_akun])) $options[$record->nomor_akun] = $record->nomor_akun;
+                    return $options;
+                })
+                    ->visible(fn () => !Setting::flag(2))->disabled(fn () => !RkaEntryAccess::superadmin())
+                    ->dehydrated(fn () => RkaEntryAccess::superadmin() && !Setting::flag(2)),
+            ])->columns(2)->columnSpanFull(),
+            Section::make('Nilai Anggaran')->visible(fn (Get $get) => !$get('is_parent'))->schema([
+                TextInput::make('volume')->label('Volume')->type('number')->inputMode('decimal')->rules(['numeric', 'min:0'])->step('0.0001')->live(onBlur: true)
+                    ->visible(fn (Get $get) => static::mode($get) === 'quantity_price')->required(),
+                Select::make('satuan')->label('Satuan')->options(config('conf_variable.satuan'))
+                    ->visible(fn (Get $get) => static::mode($get) === 'quantity_price'),
+                TextInput::make('harga_satuan')->label('Harga satuan')->type('number')->inputMode('decimal')->rules(['numeric', 'min:0'])->step('0.0001')->live(onBlur: true)
+                    ->visible(fn (Get $get) => static::mode($get) === 'quantity_price')->required(),
+                TextInput::make('total')->label('Total manual')->type('number')->inputMode('decimal')->rules(['numeric', 'min:0'])->step('0.01')->required()
+                    ->visible(fn (Get $get) => static::mode($get) === 'manual'),
+                \Filament\Infolists\Components\TextEntry::make('calculated_total')->label('Total')
+                    ->visible(fn (Get $get) => static::mode($get) === 'quantity_price')
+                    ->state(function (Get $get): string {
+                        try { return RkaDecimal::display(RkaDecimal::round(bcmul(
+                            RkaDecimal::input($get('volume'), 'volume', 4), RkaDecimal::input($get('harga_satuan'), 'harga_satuan', 4), 8))); }
+                        catch (\Illuminate\Validation\ValidationException) { return '—'; }
+                    }),
+                Toggle::make('is_detail')->label('Rincian kegiatan')->default(false),
+            ])->columns(3)->columnSpanFull(),
+            Section::make('Rencana Bulanan')->visible(fn (Get $get) => !$get('is_parent'))->schema(
+                array_map(fn ($month) => TextInput::make($month)->label(ucfirst($month))->type('number')->inputMode('decimal')->rules(['numeric', 'min:0'])->step('0.01')->default(0), RkaEntry::MONTHS)
+            )->columns(4)->columnSpanFull(),
+        ]);
     }
 
-    public static function buatColumn($month)
+    public static function monthColumn(string $month): TextColumn|TextInputColumn
     {
-        if (auth()->user()->is_editmode) {
-            return TextInputColumn::make($month)->disabled(fn ($record) => !static::canEdit($record))
-                ->alignRight()
-                ->rules(['numeric'])
-                ->type('number');
-        } else {
-            return TextColumn::make($month)
-                ->formatStateUsing(function (Rka $record, $state) use ($month) {
-                    if ($record->is_parent) {
-                        // Display aggregates must never persist data or touch updated_at.
-                        $jumlah = $record->childrenScoreSum($month);
-
-                        if ($state !== null && $state > 0) {
-                            return ($jumlah !== $state) ? number_format($jumlah) : null;
-                        } else {
-                            return ($jumlah > 0) ? number_format($jumlah) : null;
-                        }
-                    } else if ($state !== null) {
-                        return number_format((float)$state);
-                    }
-                })
-                ->sortable()
-                ->alignRight()
-                ->weight(function (Rka $record) {
-                    if ($record->is_parent && $record->parent_id !== null) {
-                        return 'medium';
-                    } elseif ($record->parent_id !== null) {
-                        return '';
-                    } else {
-                        return 'black';
-                    }
-                })
-                ->size(function (Rka $record) {
-                    if ($record->is_parent && $record->parent_id == null) {
-                        return 'lg';
-                    }
-                })
-                ->alignRight();
-        }
+        return auth()->user()->is_editmode
+            ? TextInputColumn::make($month)->label(ucfirst($month))->type('number')->step('0.01')->rules(['nullable', 'numeric', 'min:0'])
+                ->disabled(fn (RkaEntry $record) => !static::canEdit($record) || $record->is_parent)
+            : TextColumn::make($month)->label(ucfirst($month))->alignRight()->sortable()->formatStateUsing(fn ($state) => RkaDecimal::display($state));
     }
 
     public static function table(Table $table): Table
     {
-        $authUser = auth()->user();
-        $isEditMode = $authUser->is_editmode;
-        $units = $units = Unit::all()->pluck('nama', 'id')->toArray();
-        $isAdminKeuangan = $authUser->hasRole('admin-keuangan') || Setting::flag(1);
-        $isSuperandKeu = $authUser->hasRole(['superadmin', 'admin-keuangan']);
-        $settingValBool = Setting::flag(2);
-        $akunOptions  =  Akun::all()->pluck('nama', 'id');
-        return $table
-            ->paginationPageOptions([50, 100, 200, 300, 500])->defaultPaginationPageOption(50)
+        $edit = auth()->user()->is_editmode;
+        $units = Unit::pluck('nama', 'id');
+        return $table->paginationPageOptions([50, 100, 200, 300, 500])->defaultPaginationPageOption(50)
             ->columns([
-                ($settingValBool) ?
-                    TextColumn::make('nomor_akun')->formatStateUsing(function (Rka $record) {
-                        return (($record->is_parent) ? '' : 'Inv-' . str_pad($record->id, 6, '0', STR_PAD_LEFT));
-                    })->grow(false)
-                    : (($isSuperandKeu) ?
-                        SelectColumn::make('nomor_akun')->disabled(fn ($record) => !static::canEdit($record))->options($akunOptions)->grow(false)
-                        : TextColumn::make('nomor_akun'))->grow(false),
-                ($isEditMode) ?
-                    TextInputColumn::make('uraian')->disabled(fn ($record) => !static::canEdit($record))->grow(false)
-                    :
-                    TextColumn::make('uraian')
-                    ->icon(function (Rka $record) {
-                        if (!$record->is_parent && $record->parent_id !== null) {
-                            return 'heroicon-o-ellipsis-horizontal';
-                        }
-                    })->grow(false)
-                    ->weight(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id !== null) {
-                            return 'medium';
-                        } elseif ($record->parent_id !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })->searchable(),
-                TextColumn::make('unit_nama')
-                    ->label('Unit')
-                    ->formatStateUsing(fn ($state) =>  $units[$state] ?? null),
-                ($isEditMode) ? TextInputColumn::make('volume')->disabled(fn ($record) => !static::canEdit($record))
-                    ->alignRight()
-                    ->rules(['required', 'numeric'])
-                    ->type('number')
-                    : TextColumn::make('volume')
-                    ->formatStateUsing(fn ($state) => ($state !== null) ? number_format((float)$state) : null)
-                    ->alignRight(),
-                ($isEditMode) ? SelectColumn::make('satuan')->disabled(fn ($record) => !static::canEdit($record))->options(config('conf_variable.satuan')) : TextColumn::make('satuan'),
-                ($isEditMode) ? TextInputColumn::make('harga_satuan')->disabled(fn ($record) => !static::canEdit($record))->alignRight()->rules(['required', 'numeric'])->type('number') : TextColumn::make('harga_satuan')
-                    ->formatStateUsing(fn ($state) => ($state !== null) ? number_format((float)$state) : null)
-                    ->alignRight(),
-                TextColumn::make('total')
-                    ->formatStateUsing(function (Rka $record, $state) {
-                        if ($record->is_parent) {
-                            //$parent = Rka::find($record->id);
-                            $jumlah = $record->childrenScoreSum('total');
-                            // Derived totals are calculated for display only.
-
-                            if ($state !== null && $state > 0) {
-                                return ($jumlah !== $state) ? number_format($jumlah) : null;
-                            } else {
-                                return ($jumlah > 0) ? number_format($jumlah) : null;
-                            }
-                        } else if ($state !== null) {
-                            if ($state == $record->volume * $record->harga_satuan) {
-                                return number_format((float)$state);
-                            } else {
-                                $state = $record->volume * $record->harga_satuan;
-                                // Editing/saving must be an explicit user action, never a table render.
-                                return number_format((float)$state);
-                            }
-                        }
-                    })->sortable()
-                    ->alignRight()
-                    ->weight(function (Rka $record) {
-                        $isParentId = $record->parent_id;
-                        $isParentAndHasParent = $record->is_parent && $isParentId !== null;
-                        if ($isParentAndHasParent) {
-                            return 'medium';
-                        } elseif ($isParentId !== null) {
-                            return '';
-                        } else {
-                            return 'black';
-                        }
-                    })
-                    ->size(function (Rka $record) {
-                        if ($record->is_parent && $record->parent_id == null) {
-                            return 'lg';
-                        }
-                    })
-                    ->color(function (Rka $record) {
-                        if (!$record->is_parent) {
-                            $data = Rka::find($record->id); // Replace with your actual record id
-
-                            $total = floatval($data->januari) + floatval($data->februari) + floatval($data->maret) + floatval($data->april)
-                                + floatval($data->mei) + floatval($data->juni) + floatval($data->juli) + floatval($data->agustus)
-                                + floatval($data->september) + floatval($data->oktober) + floatval($data->november)
-                                + floatval($data->desember);
-
-                            if ($record->total < $total) {
-                                return 'danger';
-                            } else if ($record->total > $total) {
-                                return 'primary';
-                            }
-                        }
+                TextColumn::make('category.name')->label('Kategori')->badge(),
+                Setting::flag(2)
+                    ? TextColumn::make('nomor_akun')->label('Nomor akun')->formatStateUsing(fn (RkaEntry $record) => $record->documentCode())
+                    : (RkaEntryAccess::superadmin()
+                        ? SelectColumn::make('nomor_akun')->label('Nomor akun')->options(Akun::pluck('nama', 'id'))
+                            ->disabled(fn (RkaEntry $record) => !static::canEdit($record))
+                        : TextColumn::make('nomor_akun')->label('Nomor akun')),
+                $edit ? TextInputColumn::make('uraian')->rules(['required', 'max:255'])->disabled(fn (RkaEntry $record) => !static::canEdit($record))
+                    : TextColumn::make('uraian')->searchable()->weight(fn (RkaEntry $record) => $record->is_parent ? 'bold' : null)
+                        ->extraAttributes(fn (RkaEntry $record) => ['style' => 'padding-inline-start: '.(min(20, (int) ($record->depth ?? 0)) * 12).'px']),
+                TextColumn::make('is_parent')->label('Jenis baris')->formatStateUsing(fn ($state) => $state ? 'Induk' : 'Rincian')
+                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('unit_nama')->label('Unit')->formatStateUsing(fn ($state) => $units[$state] ?? $state),
+                $edit ? TextInputColumn::make('volume')->type('number')->step('0.0001')->rules(['required', 'numeric', 'min:0'])
+                    ->disabled(fn (RkaEntry $record) => !static::canEdit($record) || $record->manual() || $record->is_parent)
+                    : TextColumn::make('volume')->formatStateUsing(fn ($state) => RkaDecimal::display($state, 4)),
+                $edit ? SelectColumn::make('satuan')->options(config('conf_variable.satuan'))
+                    ->disabled(fn (RkaEntry $record) => !static::canEdit($record) || $record->manual() || $record->is_parent) : TextColumn::make('satuan'),
+                $edit ? TextInputColumn::make('harga_satuan')->label('Harga satuan')->type('number')->step('0.0001')->rules(['required', 'numeric', 'min:0'])
+                    ->disabled(fn (RkaEntry $record) => !static::canEdit($record) || $record->manual() || $record->is_parent)
+                    : TextColumn::make('harga_satuan')->label('Harga satuan')->formatStateUsing(fn ($state) => RkaDecimal::display($state, 4)),
+                $edit ? TextInputColumn::make('total')->label('Total')->type('number')->step('0.01')->rules(['required', 'numeric', 'min:0'])
+                    ->disabled(fn (RkaEntry $record) => !static::canEdit($record) || !$record->manual() || $record->is_parent)
+                    : TextColumn::make('total')->label('Total')->alignRight()->sortable()->formatStateUsing(fn ($state) => RkaDecimal::display($state)),
+                TextColumn::make('monthly_balance')->label('Sisa rencana')->state(fn (RkaEntry $record) => $record->monthlyBalance())
+                    ->formatStateUsing(fn ($state) => RkaDecimal::display($state))->color(fn ($state) => str_starts_with((string) $state, '-') ? 'danger' : null),
+                ...array_map(fn ($month) => static::monthColumn($month), RkaEntry::MONTHS),
+                TextColumn::make('origin_source')->label('Sumber historis')->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('origin_id')->label('ID asal')->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('migration_issues')->label('Pemeriksaan data lama')->badge()
+                    ->formatStateUsing(fn ($state) => $state ? 'Perlu diperiksa' : '')->color('warning')->toggleable(),
+                TextColumn::make('updated_at')->label('Diperbarui')->dateTime()->toggleable(isToggledHiddenByDefault: true),
+            ])->filters([
+                SelectFilter::make('category_id')->label('Kategori')->options(fn () => RkaCategory::orderBy('sort_order')->pluck('name', 'id')),
+                SelectFilter::make('unit_nama')->label('Unit')->options($units)->visible(fn () => RkaEntryAccess::superadmin()),
+            ])->recordActions([
+                Actions\Action::make('duplikat')->label('Duplikat')->icon('heroicon-o-document-duplicate')
+                    ->visible(fn (RkaEntry $record) => static::canEdit($record))
+                    ->action(function (RkaEntry $record): void {
+                        abort_unless(static::canEdit($record), 403);
+                        $copy = $record->replicate(['depth', 'path', 'document_number', 'origin_source', 'origin_id', 'origin_snapshot', 'migration_hash', 'migration_issues']);
+                        \MrAdder\FilamentLogger\Support\ReplicationContextStore::remember($copy, $record);
+                        $copy->uraian .= ' COPY';
+                        $copy->save();
                     }),
-                self::buatColumn('januari'),
-                self::buatColumn('februari'),
-                self::buatColumn('maret'),
-                self::buatColumn('april'),
-                self::buatColumn('mei'),
-                self::buatColumn('juni'),
-                self::buatColumn('juli'),
-                self::buatColumn('agustus'),
-                self::buatColumn('september'),
-                self::buatColumn('oktober'),
-                self::buatColumn('november'),
-                self::buatColumn('desember'),
-                TextColumn::make('created_at')
-                    ->dateTime()->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->dateTime()->toggleable(isToggledHiddenByDefault: true),
-            ]) //->reorderable('order_column')
-            ->filters([
-                //
-            ])
-            ->recordActions([
-                Actions\Action::make('duplikat')
-                    ->action(function (Rka $record) {
-                        $newData = $record->replicate(['depth', 'path']);
-                        \MrAdder\FilamentLogger\Support\ReplicationContextStore::remember($newData, $record);
-                        $newData->uraian = $record->uraian . ' COPY';
-                        $newData->save();
-                    })
-                    ->icon('heroicon-s-document-duplicate')
-                    ->hidden($isAdminKeuangan),
-                Actions\ViewAction::make()->hidden(!$isAdminKeuangan),
-                Actions\EditAction::make()->hidden($isAdminKeuangan),
-                Actions\DeleteAction::make()->hidden($isAdminKeuangan),
-            ])
-            ->headerActions([
-                LegacyExportAction::make('export'),
-            ]);
+                Actions\ViewAction::make(), Actions\EditAction::make(), Actions\DeleteAction::make(),
+            ])->headerActions([LegacyExportAction::make('export')])
+            ->toolbarActions([Actions\DeleteBulkAction::make()->authorizeIndividualRecords()->databaseTransaction()]);
     }
 
-    public static function getPages(): array
+    public static function getPages(): array { return ['index' => RkaResource\Pages\ManageRkas::route('/')]; }
+    public static function defaultExportColumns(): array
     {
-        return [
-            'index' => Pages\ManageRkas::route('/'),
-        ];
+        return ['category.name', 'nomor_akun', 'uraian', 'is_parent', 'unit_nama', 'volume', 'satuan', 'harga_satuan', 'total', ...RkaEntry::MONTHS];
     }
 }

@@ -8,3 +8,4 @@ Route::get('/', function () {
 
 // Additive module routes. Existing web endpoints remain unchanged.
 require __DIR__.'/rka_platform.php';
+require __DIR__.'/rka_legacy_redirects.php';

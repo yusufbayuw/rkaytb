@@ -14,6 +14,21 @@ async function login(page, email = 'admin@example.test') {
     await expect(page.locator('h1').first()).toBeVisible();
 }
 
+async function rkaCategory(page, name = 'Investasi') {
+    await page.goto(routes().RkaResource);
+    await categoryFilter(page, name);
+}
+
+async function categoryFilter(page, name) {
+    const filters = page.locator('.fi-tabs').first();
+    const button = filters.getByRole('button', { name, exact: true });
+    if (await button.isVisible()) await button.click();
+    else {
+        await filters.locator('[data-tabs-overflow-ellipsis]:visible').click();
+        await page.getByRole('menuitem', { name, exact: true }).click();
+    }
+}
+
 test.beforeEach(async ({ page }) => {
     page._applicationErrors = [];
     page.on('pageerror', error => page._applicationErrors.push(error.message));
@@ -91,7 +106,7 @@ test('permission upload supports column mapping and duplicate reporting', async 
 
 test('legacy export retains preview, column selection, XLSX download, and printing', async ({ page }) => {
     await login(page, 'unit-a@example.test');
-    await page.goto(routes().RkaResource);
+    await rkaCategory(page);
     await page.getByRole('searchbox', { name: 'Cari', exact: true }).fill('Rincian');
     await expect(page.getByText('Rincian Unit Uji A', { exact: true })).toBeVisible();
     await expect(page.getByText('Rincian Unit Uji B', { exact: true })).toHaveCount(0);
@@ -176,7 +191,7 @@ test('Shield roles and superadmin system pages work without exposing operational
 test('wide financial tables keep sticky headers, drag scrolling, decimal editing and 500-row pagination', async ({ page }, info) => {
     test.setTimeout(300000);
     await login(page, 'unit-a@example.test');
-    await page.goto(routes().RkaResource);
+    await rkaCategory(page);
     const editMode = page.getByRole('button', { name: 'Mode: Edit', exact: true });
     if (await editMode.count()) {
         await editMode.click();
@@ -227,11 +242,90 @@ test('wide financial tables keep sticky headers, drag scrolling, decimal editing
     const saved = page.waitForResponse(response => response.request().method() === 'POST' && response.url().includes('/livewire-'), { timeout: 120000 });
     await price.press('Tab');
     expect((await saved).status()).toBe(200);
-    await expect.poll(() => price.inputValue()).toBe(priceValue);
+    await expect.poll(() => price.inputValue().then(Number)).toBe(Number(priceValue));
     await page.reload();
-    await expect(page.locator('.fi-ta-table tbody tr').filter({ has: page.locator('input[value="Rincian Unit Uji A"]') }).locator('input[type=number]').nth(1)).toHaveValue(priceValue);
+    await expect.poll(() => page.locator('.fi-ta-table tbody tr').filter({ has: page.locator('input[value="Rincian Unit Uji A"]') }).locator('input[type=number]').nth(1).inputValue().then(Number)).toBe(Number(priceValue));
     await page.locator('select:visible').filter({ has: page.locator('option[value="500"]') }).first().selectOption('50');
     await expect(page.locator('.fi-ta-table tbody tr')).toHaveCount(50);
     await page.getByRole('button', { name: 'Mode: Edit', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Mode: Normal', exact: true })).toBeVisible();
+});
+
+test('dynamic RKA categories support manual input, exact large cents, filtered export and deactivation', async ({ page }, info) => {
+    test.setTimeout(240000);
+    await login(page);
+    expect(await page.getByRole('link', { name: 'RKA', exact: true }).count()).toBe(1);
+    for (const name of ['RKA Investasi', 'RKA Maintenance', 'RKA Consumable', 'RKA Operasional', 'RKA Gaji', 'RKA Pendapatan']) {
+        expect(await page.getByRole('link', { name, exact: true }).count()).toBe(0);
+    }
+    const categoryName = `Pelatihan ${info.project.name}`;
+    await page.goto(routes().RkaCategoryResource);
+    await page.getByRole('button', { name: 'Tambah kategori', exact: true }).click();
+    let dialog = page.getByRole('dialog');
+    await dialog.getByLabel(/^Nama kategori/).fill(categoryName);
+    await dialog.getByLabel(/^Kode kategori/).fill(`training-${info.project.name}`);
+    await dialog.getByLabel(/^Jenis/).selectOption('expense');
+    await dialog.getByLabel(/^Perhitungan/).selectOption('manual');
+    await dialog.getByLabel(/^Awalan kode dokumen/).fill(info.project.name === 'mobile' ? 'PTM' : 'PTD');
+    await dialog.getByLabel(/^Urutan/).fill('7');
+    await dialog.getByRole('button', { name: /^(Buat|Create)$/ }).click();
+    await expect(dialog).toBeHidden();
+    await rkaCategory(page, categoryName);
+    await page.getByRole('button', { name: 'Tambah RKA', exact: true }).click();
+    dialog = page.getByRole('dialog');
+    await dialog.getByLabel(/^Uraian/).fill(`Pelatihan manual ${info.project.name}`);
+    await dialog.getByLabel(/^Unit/).selectOption({ label: 'Unit Uji A' });
+    await expect(dialog.getByLabel(/^Volume/)).toBeHidden();
+    await dialog.getByLabel(/^Total manual/).fill('1234.56');
+    await dialog.getByLabel(/^Januari/).fill('1234.56');
+    await dialog.getByRole('button', { name: /^(Buat|Create)$/ }).click();
+    await expect(dialog).toBeHidden();
+    const row = page.getByRole('row').filter({ hasText: `Pelatihan manual ${info.project.name}` });
+    await expect(row.getByText('1.234,56', { exact: true }).first()).toBeVisible();
+    await row.getByRole('button', { name: /^(Ubah|Edit)$/ }).click();
+    dialog = page.getByRole('dialog');
+    await dialog.getByLabel(/^Total manual/).fill('999999999999999.99');
+    await dialog.getByRole('button', { name: /^Simpan/ }).click();
+    await expect(dialog).toBeHidden();
+    await page.getByRole('button', { name: 'Ekspor', exact: true }).click();
+    dialog = page.getByRole('dialog');
+    await dialog.getByLabel(/^Nama berkas/).fill(`kategori-${info.project.name}`);
+    await dialog.getByLabel(/^Format/).selectOption('csv');
+    const downloadPromise = page.waitForEvent('download');
+    await dialog.locator('button[type=submit]').filter({ hasNotText: 'Cetak' }).click();
+    const download = await downloadPromise;
+    const output = info.outputPath('manual-category.csv'); await download.saveAs(output);
+    const csv = fs.readFileSync(output, 'utf8');
+    expect(csv).toContain('999999999999999.99');
+    expect(csv).toContain(`Pelatihan manual ${info.project.name}`);
+    expect(csv).not.toContain('Rincian Unit Uji A');
+    await row.getByRole('button', { name: /^(Ubah|Edit)$/ }).click();
+    dialog = page.getByRole('dialog');
+    await dialog.getByLabel(/^Total manual/).fill('1234.56');
+    await dialog.getByRole('button', { name: /^Simpan/ }).click();
+    await expect(dialog).toBeHidden();
+    await page.goto(routes().RkaCategoryResource);
+    await page.getByRole('row').filter({ hasText: categoryName }).getByRole('button', { name: /^(Ubah|Edit)$/ }).click();
+    dialog = page.getByRole('dialog');
+    await dialog.getByRole('switch', { name: 'Aktif untuk anggaran baru', exact: true }).click();
+    await dialog.getByRole('button', { name: /^Simpan/ }).click();
+    await expect(dialog).toBeHidden();
+    await rkaCategory(page, `${categoryName} (nonaktif)`);
+    await expect(page.getByText(`Pelatihan manual ${info.project.name}`, { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Tambah RKA', exact: true })).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath('unified-rka-category.png'), fullPage: true });
+});
+
+test('finance sees global salary but other category rows remain scoped and read only', async ({ page }) => {
+    await login(page, 'finance@example.test');
+    await rkaCategory(page, 'Gaji');
+    await expect(page.getByText('Gaji Unit Uji B', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Tambah RKA', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Mode:/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^(Ubah|Edit|Hapus|Duplikat)$/ })).toHaveCount(0);
+    await categoryFilter(page, 'Investasi');
+    await page.getByRole('searchbox', { name: 'Cari', exact: true }).fill('Rincian');
+    await expect(page.getByText('Rincian Unit Uji A', { exact: true })).toBeVisible();
+    await expect(page.getByText('Rincian Unit Uji B', { exact: true })).toHaveCount(0);
+    expect((await page.goto(routes().RkaCategoryResource)).status()).toBe(403);
 });

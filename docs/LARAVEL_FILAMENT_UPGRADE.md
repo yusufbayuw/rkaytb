@@ -2,6 +2,10 @@
 
 Tanggal pemeriksaan: 12 November 2026.
 
+Pembaruan 13 November 2026: modul Employee KPI Score, Employee, KPI Target, dan Position dihapus atas permintaan pengguna. Resource aktif kini 13, setelah penambahan audit Sistem dan penghapusan empat resource tersebut. Model, halaman, event/listener pembentukan skor, dan fixture pegawai sudah dilepas. Migrasi/tabel historis dipertahankan agar data existing tidak hilang; eksportir audit memakai type/ID dan snapshot tersimpan tanpa memuat model yang sudah dihapus. Catatan checkpoint dan hasil pengujian bertanggal 12 November di bawah merupakan riwayat sebelum penghapusan ini. KPI keuangan pada Workspace tetap menjadi bagian alur RKA.
+
+Verifikasi penghapusan: seluruh 118 tes SQLite lulus dengan 897 assertions; tes khusus audit historis lulus dengan 27 assertions. Build produksi, sintaks tujuh berkas PHP yang berubah/ditambahkan, serta kompilasi Blade/config/route dan keunikan route lulus. Browser pada situs lokal membuktikan login/logout superadmin, hilangnya empat menu, status 404 untuk keempat URL lama, serta akses normal ke RKA Investasi, Workspace, dan audit. Log tersedia di `.tools/remove-hr-tests.txt`, `.tools/remove-hr-audit-test.txt`, `.tools/remove-hr-browser.txt`, `.tools/remove-hr-build.txt`, dan `.tools/remove-hr-release-check.txt`.
+
 ## Target
 
 Laravel 13.42.0, Filament 5.11.2, Livewire 4, PHP 8.4, Tailwind 4, Vite 8, Node 24. Versi lengkap yang dipasang tercatat di composer.lock dan package-lock.json. Pekerjaan mencakup fitur existing dan perbaikan fungsi yang ditemukan, tanpa menambahkan fitur roadmap yang belum diimplementasikan.

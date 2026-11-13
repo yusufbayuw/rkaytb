@@ -3,7 +3,7 @@
 namespace Tests\Feature;
 
 use App\Filament\Resources\RkaResource;
-use App\Models\{Rka, Unit, User};
+use App\Models\{RkaEntry as Rka, RkaCategory, Unit, User};
 use App\Services\{LegacyExportService, PermissionSpreadsheetImporter};
 use Filament\Facades\Filament;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -82,9 +82,9 @@ class LegacyImportExportTest extends TestCase
         $a = Unit::create(['nama' => 'A']);
         $b = Unit::create(['nama' => 'B']);
         $this->actingAs(User::factory()->create(['unit_id' => $a->id]));
-        Rka::create(['uraian' => '=HYPERLINK("https://example.test")', 'nomor_akun' => '00123', 'unit_nama' => (string) $a->id,
+        Rka::create(['category_id' => RkaCategory::where('code', 'investment')->value('id'), 'uraian' => '=HYPERLINK("https://example.test")', 'nomor_akun' => '00123', 'unit_nama' => (string) $a->id,
             'is_parent' => false, 'volume' => 2, 'harga_satuan' => 12.5]);
-        Rka::create(['uraian' => 'Private other unit', 'unit_nama' => (string) $b->id, 'is_parent' => false, 'volume' => 1, 'harga_satuan' => 100]);
+        Rka::create(['category_id' => RkaCategory::where('code', 'investment')->value('id'), 'uraian' => 'Private other unit', 'unit_nama' => (string) $b->id, 'is_parent' => false, 'volume' => 1, 'harga_satuan' => 100]);
         $definitions = [
             'uraian' => ['label' => 'Uraian', 'value' => fn ($record) => $record->uraian],
             'nomor_akun' => ['label' => 'Akun', 'value' => fn ($record) => $record->nomor_akun],

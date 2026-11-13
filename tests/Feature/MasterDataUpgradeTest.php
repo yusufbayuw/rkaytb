@@ -2,8 +2,8 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Resources\{EmployeeResource, UserResource, RoleResource};
-use App\Models\{Employee, EmployeeKpiScore, KpiTarget, Position, Unit, User};
+use App\Filament\Resources\{UserResource, RoleResource};
+use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -24,21 +24,51 @@ class MasterDataUpgradeTest extends TestCase
         $this->actingAs($admin);
     }
 
-    public function test_creating_employee_from_filament_creates_each_target_score_once(): void
+    public function test_retired_employee_modules_have_no_routes_resources_models_or_event_listener(): void
     {
-        $unit = Unit::create(['nama' => 'Unit']);
-        $position = Position::create(['nama' => 'Position']);
-        $targets = collect(['Quality', 'Delivery'])->map(fn ($name) => KpiTarget::create(['nama' => $name]));
-        $position->kpiTargets()->sync($targets->pluck('id')->all());
-        $this->assertSame(1, $targets->first()->positions()->count());
-        Livewire::test(EmployeeResource::getPages()['index']->getPage())->callAction('create', data: [
-            'nama' => 'New Employee', 'position_id' => $position->id, 'unit_id' => $unit->id,
-        ])->assertHasNoActionErrors();
-        $employee = Employee::firstOrFail();
-        $this->assertSame(2, $employee->kpiScores()->count());
-        $this->assertSame(2, EmployeeKpiScore::count());
-        $this->assertEquals(0, $employee->kpiScores()->sum('score'));
-        $this->assertEquals(0, $employee->kpiScores()->sum('subtotal'));
+        $resources = Filament::getPanel('admin')->getResources();
+        foreach (['Employee', 'EmployeeKpiScore', 'KpiTarget', 'Position'] as $model) {
+            $this->assertFalse(class_exists('App\\Models\\'.$model));
+            $this->assertNotContains('App\\Filament\\Resources\\'.$model.'Resource', $resources);
+        }
+        foreach (['employees', 'employee-kpi-scores', 'kpi-targets', 'positions'] as $slug) {
+            $this->get('/admin/'.$slug)->assertNotFound();
+            $this->assertFalse(\Illuminate\Support\Facades\Route::has('filament.admin.resources.'.$slug.'.index'));
+        }
+        $this->assertFalse(\Illuminate\Support\Facades\Event::hasListeners('App\\Events\\EmployeePositionCreated'));
+    }
+
+    public function test_historical_audit_of_retired_models_remains_readable_and_exportable(): void
+    {
+        $activities = collect(['Employee', 'EmployeeKpiScore', 'KpiTarget', 'Position'])->map(fn ($model) =>
+            \Spatie\Activitylog\Models\Activity::create([
+                'log_name' => 'Historical HR', 'event' => 'created', 'description' => 'Retired '.$model,
+                'subject_type' => 'App\\Models\\'.$model, 'subject_id' => 42,
+                'properties' => ['attributes' => ['nama' => 'Historical record']],
+            ])
+        );
+        $resource = \App\Filament\Resources\SystemActivityResource::class;
+        foreach ($activities as $activity) {
+            $this->get($resource::getUrl('view', ['record' => $activity]))->assertOk()->assertSee($activity->description);
+        }
+        $component = Livewire::test($resource::getPages()['index']->getPage())->assertCanSeeTableRecords($activities);
+        $component->call('exportCsv')->assertFileDownloaded();
+        $component->call('exportJson')->assertFileDownloaded();
+        $exporter = app(\MrAdder\FilamentLogger\Support\ActivityExporter::class);
+        foreach (['csv', 'json'] as $format) {
+            $stream = fopen('php://temp', 'w+');
+            try {
+                $this->assertSame(4, $exporter->writeTo($stream, $format,
+                    \Spatie\Activitylog\Models\Activity::where('log_name', 'Historical HR')->with('subject')));
+                rewind($stream);
+                $content = stream_get_contents($stream);
+                foreach (['Employee', 'EmployeeKpiScore', 'KpiTarget', 'Position'] as $model) {
+                    $this->assertStringContainsString($model, $content);
+                }
+                $this->assertStringContainsString('Historical record', $content);
+            } finally { fclose($stream); }
+        }
+        $this->assertSame(4, \Spatie\Activitylog\Models\Activity::where('log_name', 'Historical HR')->count());
     }
 
     public function test_roles_permissions_and_user_without_legacy_unit_can_be_created_in_filament(): void

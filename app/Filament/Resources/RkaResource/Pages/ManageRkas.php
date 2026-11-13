@@ -2,51 +2,43 @@
 
 namespace App\Filament\Resources\RkaResource\Pages;
 
-use Closure;
-use App\Models\Rka;
-use App\Models\User;
-use App\Models\Setting;
-use Filament\Actions;
 use App\Filament\Resources\RkaResource;
+use App\Models\RkaCategory;
+use App\Support\RkaEntryAccess;
+use Filament\Actions;
 use Filament\Resources\Pages\ManageRecords;
-use App\Filament\Resources\RkaResource\Widgets\TotalOverview;
+use Filament\Schemas\Components\Tabs\Tab;
+use Illuminate\Database\Eloquent\Builder;
 
 class ManageRkas extends ManageRecords
 {
+    use \Filament\Pages\Concerns\ExposesTableToWidgets;
     protected static string $resource = RkaResource::class;
+
+    public function getTabs(): array
+    {
+        $tabs = ['all' => Tab::make('Semua')];
+        foreach (RkaCategory::orderBy('sort_order')->orderBy('id')->get() as $category) {
+            $tabs[(string) $category->id] = Tab::make($category->name.($category->is_active ? '' : ' (nonaktif)'))
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('category_id', $category->id));
+        }
+        return $tabs;
+    }
 
     protected function getHeaderActions(): array
     {
         return [
             Actions\Action::make('toggleEditMode')->label(fn () => auth()->user()->is_editmode ? 'Mode: Edit' : 'Mode: Normal')
-                ->action(
-                    function () {
-                        abort_unless(\App\Support\LegacyRkaAccess::canWrite(auth()->user()), 403);
-                        $userData = auth()->user();
-                        $userData->is_editmode = !(auth()->user()->is_editmode);
-                        $userData->save();
-                        $this->resetTable();
-                    }
-                )->color(fn () => (auth()->user()->is_editmode) ? 'gray' : 'primary')
-                ->hidden(!\App\Support\LegacyRkaAccess::canWrite(auth()->user())),
-            Actions\CreateAction::make()->hidden(Setting::flag(1)),
+                ->visible(fn () => RkaEntryAccess::canWrite())->action(function (): void {
+                    abort_unless(RkaEntryAccess::canWrite(), 403);
+                    $user = auth()->user(); $user->is_editmode = !$user->is_editmode; $user->save();
+                    $this->resetTable();
+                }),
+            Actions\CreateAction::make()->label('Tambah RKA')->databaseTransaction()
+                ->visible(fn () => RkaEntryAccess::canWrite() && (!is_numeric($this->activeTab)
+                    || (bool) RkaCategory::find($this->activeTab)?->is_active)),
         ];
     }
 
-    public function isTableRecordSelectable(): ?Closure
-    {
-        return fn(Rka $record): bool => false;
-    }
-
-    protected function getTableRecordsPerPageSelectOptions(): array
-    {
-        return [50, 100, 200, 300, 500];
-    }
-
-    protected function getHeaderWidgets(): array
-    {
-        return [
-            TotalOverview::class,
-        ];
-    }
+    protected function getHeaderWidgets(): array { return [\App\Filament\Widgets\RkaOverview::class]; }
 }

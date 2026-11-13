@@ -3,15 +3,13 @@
 namespace Tests\Feature;
 
 use App\Models\Rka;
-use App\Models\RkaGaji;
+use App\Models\RkaEntry;
+use App\Models\RkaCategory;
 use App\Models\Unit;
 use App\Models\User;
 use App\Models\RkaPlatform\{Organization, Membership};
-use App\Filament\Resources\{
-    RkaResource, RkaMaintenanceResource, RkaConsumableResource,
-    RkaOperasionalResource, RkaGajiResource, RkaPendapatanResource
-};
-use App\Filament\Resources\RkaResource\Widgets\TotalOverview;
+use App\Filament\Resources\RkaResource;
+use App\Filament\Widgets\RkaOverview as TotalOverview;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -89,8 +87,7 @@ class RkaPlatformLegacyFinanceRegressionTest extends TestCase
         $this->assertTrue($user->canAccessPanel(\Filament\Facades\Filament::getPanel('admin')));
 
         foreach ([
-            RkaResource::class, RkaMaintenanceResource::class, RkaConsumableResource::class,
-            RkaOperasionalResource::class, RkaGajiResource::class, RkaPendapatanResource::class,
+            RkaResource::class,
         ] as $resource) {
             $this->assertFalse($resource::canViewAny(), $resource.' must not expose legacy data');
             $this->assertFalse($resource::canCreate(), $resource.' must not allow creating legacy data');
@@ -174,14 +171,13 @@ class RkaPlatformLegacyFinanceRegressionTest extends TestCase
         $unitTwo = Unit::create(['nama' => 'Unit Two']);
         $user = User::factory()->create(['unit_id' => $unitOne->id]);
         $this->actingAs($user);
-        $foreign = Rka::create([
+        $foreign = RkaEntry::create(['category_id' => RkaCategory::where('code', 'investment')->value('id'), 
             'uraian' => 'Other unit item', 'is_parent' => false,
             'is_detail' => false, 'unit_nama' => (string)$unitTwo->id,
             'volume' => '1', 'harga_satuan' => '25',
         ]);
         foreach ([
-            RkaResource::class, RkaMaintenanceResource::class, RkaConsumableResource::class,
-            RkaOperasionalResource::class, RkaGajiResource::class, RkaPendapatanResource::class,
+            RkaResource::class,
         ] as $resource) {
             $this->assertFalse($resource::canView($foreign), $resource.' view must be scoped');
             $this->assertFalse($resource::canEdit($foreign), $resource.' edit must be scoped');
@@ -193,14 +189,14 @@ class RkaPlatformLegacyFinanceRegressionTest extends TestCase
     {
         $unitOne = Unit::create(['nama' => 'Human Resources A']);
         $unitTwo = Unit::create(['nama' => 'Human Resources B']);
-        RkaGaji::create(['uraian'=>'Payroll A','unit_nama'=>(string)$unitOne->id,'total'=>'100.00']);
-        RkaGaji::create(['uraian'=>'Payroll B','unit_nama'=>(string)$unitTwo->id,'total'=>'200.00']);
+        RkaEntry::create(['category_id' => RkaCategory::where('code', 'salary')->value('id'), 'uraian'=>'Payroll A','unit_nama'=>(string)$unitOne->id,'total'=>'100.00']);
+        RkaEntry::create(['category_id' => RkaCategory::where('code', 'salary')->value('id'), 'uraian'=>'Payroll B','unit_nama'=>(string)$unitTwo->id,'total'=>'200.00']);
 
         $local = User::factory()->create(['unit_id'=>$unitOne->id]);
         $this->actingAs($local);
         $this->assertSame(
             [(string)$unitOne->id],
-            RkaGajiResource::getEloquentQuery()->pluck('unit_nama')->all()
+            RkaResource::getEloquentQuery()->pluck('unit_nama')->all()
         );
 
         $finance = User::factory()->create(['unit_id'=>null]);
@@ -209,12 +205,12 @@ class RkaPlatformLegacyFinanceRegressionTest extends TestCase
         $this->actingAs($finance);
         $this->assertEqualsCanonicalizing(
             [(string)$unitOne->id,(string)$unitTwo->id],
-            RkaGajiResource::getEloquentQuery()->pluck('unit_nama')->all()
+            RkaResource::getEloquentQuery()->pluck('unit_nama')->all()
         );
 
         $unassigned = User::factory()->create(['unit_id'=>null]);
         $this->actingAs($unassigned);
-        $this->assertSame([],RkaGajiResource::getEloquentQuery()->pluck('unit_nama')->all());
+        $this->assertSame([],RkaResource::getEloquentQuery()->pluck('unit_nama')->all());
     }
 
 }
